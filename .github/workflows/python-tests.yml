@@ -25,6 +25,8 @@ jobs:
           pip install -e ".[dev]"
           pip install pytest-cov
       - name: Lint with ruff
-        run: ruff check .
+        run: |
+          ruff check . --fix  # auto-fix fixable errors (imports, trailing newlines, etc.)
+          ruff check .        # fail if unresolved issues remain
       - name: Run tests with coverage
         run: python -m pytest --cov=aa_caller --cov-fail-under=80 --cov-report=term-missing
