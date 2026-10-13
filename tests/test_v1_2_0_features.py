@@ -238,31 +238,50 @@ class TestMultiRecordOutput:
 # ---------------------------------------------------------------------------
 
 class TestBackwardCompatibility:
-    def test_single_record_single_interval_byte_identical(self, tmp_path: Path) -> None:
-        """Single-record, single-interval output should be byte-identical to v1.1.0."""
-        fasta_path = tmp_path / "ref.fasta"
-        fasta_path.write_text(">K03455 RT(Reverse Transcriptase):1-30\nATGCCCTTTAAAGGGCCCAAAT TTGGGCCC\n")
-
-        sam_path = tmp_path / "reads.sam"
-        sam_path.write_text(
-            "@HD\tVN:1.6\n@SQ\tSN:K03455\tLN:30\n"
-            "read1\t0\tK03455\t1\t30\t30M\t*\t0\t0\tATGCCCTTTAAAGGGCCCAAAT TTGGGCCC\tIIIIIIIIIIIIIIIIIIIIIIIIIIIIII\n"
-            "read2\t16\tK03455\t1\t30\t30M\t*\t0\t0\tATGCCCTTTAAAGGGCCCAAAT TTGGGCCC\tIIIIIIIIIIIIIIIIIIIIIIIIIIIIII\n"
-        )
-
-        amp_path = tmp_path / "amps.tsv"
-        amp_path.write_text("label\tprotein\treference\t5p\t3p\tstart\tend\nAmp_1\tRT\tK03455\tATG\tCCC\t1\t30\n")
-
+    def test_single_record_single_interval_byte_identical(self) -> None:
+        """Single-record, single-interval output should be byte-identical to v1.1.0.
+        
+        Uses golden files generated from codonyat==1.1.0 from PyPI on real HIV-1 data.
+        """
+        import filecmp
+        from pathlib import Path
+        
+        test_data_dir = Path(__file__).parent / "data"
+        fasta_path = test_data_dir / "hiv1_ref.fasta"
+        sam_path = test_data_dir / "hiv1_reads.sam"
+        amp_path = test_data_dir / "hiv1_amps.tsv"
+        golden_tsv = test_data_dir / "hiv1_golden_v1.1.0.tsv"
+        golden_xml = test_data_dir / "hiv1_golden_v1.1.0.xml"
+        
+        assert fasta_path.exists(), "Test data missing: hiv1_ref.fasta"
+        assert sam_path.exists(), "Test data missing: hiv1_reads.sam"
+        assert amp_path.exists(), "Test data missing: hiv1_amps.tsv"
+        assert golden_tsv.exists(), "Golden file missing: hiv1_golden_v1.1.0.tsv"
+        assert golden_xml.exists(), "Golden file missing: hiv1_golden_v1.1.0.xml"
+        
         ref = FullReference(fasta_path)
         container = SamContainer(sam_path, DEFAULT_RATIO_UPPER, DEFAULT_RATIO_LOWER, DEFAULT_ENTROPY_THRESHOLD)
         container.load()
         container.calculate_variant_frequencies("RT", ref)
-
-        csv_path = tmp_path / "output.tsv"
-        container.write_csv("sample", ref, csv_path, protein_name="RT")
-
-        expected_header = "FILE\tREFERENCE\tPROTEIN\tVARIANT\tPOSITION\tFREQ\tFWCOV\tRVCOV\tTOTALCOV\tRATIO"
-        content = csv_path.read_text()
-        lines = content.strip().split("\n")
-        assert lines[0] == expected_header
-        assert "RECORD" not in content
+        
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_tsv = Path(tmpdir) / "output.tsv"
+            output_xml = Path(tmpdir) / "output.xml"
+            
+            container.write_csv("hiv1_reads.sam", ref, output_tsv, protein_name="RT")
+            container.write_xml("hiv1_reads.sam", ref, output_xml)
+            
+            tsv_match = filecmp.cmp(output_tsv, golden_tsv, shallow=False)
+            xml_match = filecmp.cmp(output_xml, golden_xml, shallow=False)
+            
+            if not tsv_match:
+                print(f"\n=== Expected TSV (v1.1.0) ===\n{golden_tsv.read_text()}")
+                print(f"\n=== Actual TSV (v1.2.0) ===\n{output_tsv.read_text()}")
+            
+            if not xml_match:
+                print(f"\n=== Expected XML (v1.1.0) ===\n{golden_xml.read_text()[:500]}")
+                print(f"\n=== Actual XML (v1.2.0) ===\n{output_xml.read_text()[:500]}")
+            
+            assert tsv_match, "TSV output is not byte-identical to v1.1.0"
+            assert xml_match, "XML output is not byte-identical to v1.1.0"
