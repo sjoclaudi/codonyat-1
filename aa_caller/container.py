@@ -230,7 +230,7 @@ class SamContainer:
                 for variant in entry["variants"].values():
                     row = {
                         "FILE": sample_name,
-                        "REFERENCE": reference.id,
+                        "REFERENCE": record_id,
                         "PROTEIN": protein_name,
                         "VARIANT": variant.codon,
                         "POSITION": pos,
