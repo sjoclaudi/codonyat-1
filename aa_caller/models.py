@@ -201,16 +201,17 @@ class Protein:
     def from_string(cls, text: str, record_id: str = "") -> Protein:
         """Parse a single FASTA header fragment describing a protein interval.
 
-        Format: Name(Description):start-end or Name(Description):start1-end1,start2-end2;...
-        Intervals are separated by semicolons, joined intervals by commas.
+        Format: Name(Description):start-end or Name(Description):start1-end1,start2-end2
+        Multiple intervals within a protein are separated by commas.
+        Multiple proteins in a header are separated by semicolons.
         """
         left, interval_text = text.split(":")
         name, desc = left.split("(")
         desc = desc.strip(")")
 
         intervals = []
-        if ";" in interval_text:
-            interval_parts = interval_text.split(";")
+        if "," in interval_text:
+            interval_parts = interval_text.split(",")
         else:
             interval_parts = [interval_text]
 

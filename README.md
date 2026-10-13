@@ -79,14 +79,14 @@ TGGAAGGGCTAATTCACTCCCAACGAAGAC...
 
 #### Multi-interval proteins
 
-For proteins spanning multiple intervals (frameshift, splicing, or circular origin-crossing), use semicolon-separated intervals. All coordinates are **1-based inclusive**:
+For proteins spanning multiple intervals (frameshift, splicing, or circular origin-crossing), use comma-separated intervals. All coordinates are **1-based inclusive**:
 
 ```
->MN908947.3 ORF1ab(Polyprotein):266-13468;13468-21555
+>MN908947.3 ORF1ab(Polyprotein):266-13468,13468-21555
 ATTAAAGGTTTATACCTTCCCAGGTAACAA...
 ```
 
-The interval `266-13468;13468-21555` represents a -1 programmed ribosomal frameshift where base 13468 is read twice.
+The interval `266-13468,13468-21555` represents a -1 programmed ribosomal frameshift where base 13468 is read twice. Semicolons separate different proteins in the header.
 
 #### TSV annotation format (v1.2.0+)
 
