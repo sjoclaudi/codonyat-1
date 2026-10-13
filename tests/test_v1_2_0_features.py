@@ -7,9 +7,14 @@ from pathlib import Path
 
 import pytest
 
-from aa_caller.app import FullReference, SamContainer, DEFAULT_RATIO_UPPER, DEFAULT_RATIO_LOWER, DEFAULT_ENTROPY_THRESHOLD
-from aa_caller.models import Protein, Interval
-
+from aa_caller.app import (
+    DEFAULT_ENTROPY_THRESHOLD,
+    DEFAULT_RATIO_LOWER,
+    DEFAULT_RATIO_UPPER,
+    FullReference,
+    SamContainer,
+)
+from aa_caller.models import Protein
 
 # ---------------------------------------------------------------------------
 # Test multi-interval protein parsing
@@ -80,16 +85,16 @@ class TestMultiRecordFASTA:
         assert "Segment1" in ref.record_ids
         assert "Segment2" in ref.record_ids
         assert len(ref.sequences) == 2
-        
-        proteinA = ref.get_protein("GeneA", "Segment1")
-        assert proteinA is not None
-        assert proteinA.name == "GeneA"
-        assert proteinA.record_id == "Segment1"
-        
-        proteinB = ref.get_protein("GeneB", "Segment2")
-        assert proteinB is not None
-        assert proteinB.name == "GeneB"
-        assert proteinB.record_id == "Segment2"
+
+        protein_a = ref.get_protein("GeneA", "Segment1")
+        assert protein_a is not None
+        assert protein_a.name == "GeneA"
+        assert protein_a.record_id == "Segment1"
+
+        protein_b = ref.get_protein("GeneB", "Segment2")
+        assert protein_b is not None
+        assert protein_b.name == "GeneB"
+        assert protein_b.record_id == "Segment2"
 
 
 # ---------------------------------------------------------------------------
@@ -101,17 +106,17 @@ class TestTSVAnnotation:
         """TSV annotation file should load correctly."""
         fasta_path = tmp_path / "ref.fasta"
         fasta_path.write_text(">MN908947.3\nATGCCCTTTAAAGGGCCCAAAT TTGGGCCCAAAGGGAAACCCGGGTTTTTT\n")
-        
+
         tsv_path = tmp_path / "annotation.tsv"
         tsv_path.write_text(
             "record\tprotein\tdescription\tintervals\tstrand\n"
             "MN908947.3\tS\tSpike glycoprotein\t1-30\t+\n"
             "MN908947.3\tN\tNucleocapsid\t31-48\t+\n"
         )
-        
+
         ref = FullReference(fasta_path, annotation_path=tsv_path)
         assert len(ref.record_ids) == 1
-        
+
         protein_s = ref.get_protein("S", "MN908947.3")
         assert protein_s is not None
         assert protein_s.name == "S"
@@ -119,7 +124,7 @@ class TestTSVAnnotation:
         assert len(protein_s.intervals) == 1
         assert protein_s.intervals[0].start == 1
         assert protein_s.intervals[0].end == 30
-        
+
         protein_n = ref.get_protein("N", "MN908947.3")
         assert protein_n is not None
         assert protein_n.name == "N"
@@ -128,13 +133,13 @@ class TestTSVAnnotation:
         """TSV annotation with multi-interval proteins."""
         fasta_path = tmp_path / "ref.fasta"
         fasta_path.write_text(">MN908947.3\n" + "A" * 22000 + "\n")
-        
+
         tsv_path = tmp_path / "annotation.tsv"
         tsv_path.write_text(
             "record\tprotein\tdescription\tintervals\tstrand\n"
             "MN908947.3\tORF1ab\tPolyprotein\t266-13468;13468-21555\t+\n"
         )
-        
+
         ref = FullReference(fasta_path, annotation_path=tsv_path)
         protein = ref.get_protein("ORF1ab", "MN908947.3")
         assert protein is not None
@@ -148,13 +153,13 @@ class TestTSVAnnotation:
         """Minus-strand genes should be rejected with clear error."""
         fasta_path = tmp_path / "ref.fasta"
         fasta_path.write_text(">ref\nATGCCCTTTAAAGGGCCCAAAT TTGGGCCC\n")
-        
+
         tsv_path = tmp_path / "annotation.tsv"
         tsv_path.write_text(
             "record\tprotein\tdescription\tintervals\tstrand\n"
             "ref\tGeneX\tSome gene\t1-30\t-\n"
         )
-        
+
         with pytest.raises(ValueError, match="Minus-strand genes are not supported"):
             FullReference(fasta_path, annotation_path=tsv_path)
 
@@ -168,24 +173,24 @@ class TestMultiRecordOutput:
         """Single-record output should NOT have RECORD column (backward compat)."""
         fasta_path = tmp_path / "ref.fasta"
         fasta_path.write_text(">testref RT(ReverseTranscriptase):1-30\nATGCCCTTTAAAGGGCCCAAAT TTGGGCCC\n")
-        
+
         sam_path = tmp_path / "reads.sam"
         sam_path.write_text(
             "@HD\tVN:1.6\n@SQ\tSN:testref\tLN:30\n"
             "Amp_1_read1\t0\ttestref\t1\t30\t30M\t*\t0\t0\tATGCCCTTTAAAGGGCCCAAAT TTGGGCCC\tIIIIIIIIIIIIIIIIIIIIIIIIIIIIII\n"
         )
-        
+
         amp_path = tmp_path / "amps.tsv"
         amp_path.write_text("label\tprotein\treference\t5p\t3p\tstart\tend\nAmp_1\tRT\ttestref\tATG\tCCC\t1\t30\n")
-        
+
         ref = FullReference(fasta_path)
         container = SamContainer(sam_path, DEFAULT_RATIO_UPPER, DEFAULT_RATIO_LOWER, DEFAULT_ENTROPY_THRESHOLD)
         container.load()
         container.calculate_variant_frequencies("RT", ref)
-        
+
         csv_path = tmp_path / "output.tsv"
         container.write_csv("sample", ref, csv_path, protein_name="RT")
-        
+
         with open(csv_path) as f:
             reader = csv.DictReader(f, delimiter="\t")
             header = reader.fieldnames
@@ -199,30 +204,30 @@ class TestMultiRecordOutput:
             ">Seg1 RT(ReverseTranscriptase):1-30\nATGCCCTTTAAAGGGCCCAAAT TTGGGCCC\n"
             ">Seg2 POL(Polymerase):1-30\nTTTGGGCCCAAAGGGTTTACGTCGATCGAT\n"
         )
-        
+
         sam_path = tmp_path / "reads.sam"
         sam_path.write_text(
             "@HD\tVN:1.6\n@SQ\tSN:Seg1\tLN:30\n"
             "Amp_1_read1\t0\tSeg1\t1\t30\t30M\t*\t0\t0\tATGCCCTTTAAAGGGCCCAAAT TTGGGCCC\tIIIIIIIIIIIIIIIIIIIIIIIIIIIIII\n"
         )
-        
+
         amp_path = tmp_path / "amps.tsv"
         amp_path.write_text("label\tprotein\treference\t5p\t3p\tstart\tend\nAmp_1\tRT\tSeg1\tATG\tCCC\t1\t30\n")
-        
+
         ref = FullReference(fasta_path)
         container = SamContainer(sam_path, DEFAULT_RATIO_UPPER, DEFAULT_RATIO_LOWER, DEFAULT_ENTROPY_THRESHOLD)
         container.load()
         container.calculate_variant_frequencies("RT", ref)
-        
+
         csv_path = tmp_path / "output.tsv"
         container.write_csv("sample", ref, csv_path, protein_name="RT")
-        
+
         with open(csv_path) as f:
             reader = csv.DictReader(f, delimiter="\t")
             header = reader.fieldnames
             assert "RECORD" in header
             assert header == ["FILE", "REFERENCE", "RECORD", "PROTEIN", "VARIANT", "POSITION", "FREQ", "FWCOV", "RVCOV", "TOTALCOV", "RATIO"]
-            
+
             rows = list(reader)
             assert len(rows) > 0
             assert rows[0]["RECORD"] == "Seg1"
@@ -237,25 +242,25 @@ class TestBackwardCompatibility:
         """Single-record, single-interval output should be byte-identical to v1.1.0."""
         fasta_path = tmp_path / "ref.fasta"
         fasta_path.write_text(">K03455 RT(Reverse Transcriptase):1-30\nATGCCCTTTAAAGGGCCCAAAT TTGGGCCC\n")
-        
+
         sam_path = tmp_path / "reads.sam"
         sam_path.write_text(
             "@HD\tVN:1.6\n@SQ\tSN:K03455\tLN:30\n"
             "read1\t0\tK03455\t1\t30\t30M\t*\t0\t0\tATGCCCTTTAAAGGGCCCAAAT TTGGGCCC\tIIIIIIIIIIIIIIIIIIIIIIIIIIIIII\n"
             "read2\t16\tK03455\t1\t30\t30M\t*\t0\t0\tATGCCCTTTAAAGGGCCCAAAT TTGGGCCC\tIIIIIIIIIIIIIIIIIIIIIIIIIIIIII\n"
         )
-        
+
         amp_path = tmp_path / "amps.tsv"
         amp_path.write_text("label\tprotein\treference\t5p\t3p\tstart\tend\nAmp_1\tRT\tK03455\tATG\tCCC\t1\t30\n")
-        
+
         ref = FullReference(fasta_path)
         container = SamContainer(sam_path, DEFAULT_RATIO_UPPER, DEFAULT_RATIO_LOWER, DEFAULT_ENTROPY_THRESHOLD)
         container.load()
         container.calculate_variant_frequencies("RT", ref)
-        
+
         csv_path = tmp_path / "output.tsv"
         container.write_csv("sample", ref, csv_path, protein_name="RT")
-        
+
         expected_header = "FILE\tREFERENCE\tPROTEIN\tVARIANT\tPOSITION\tFREQ\tFWCOV\tRVCOV\tTOTALCOV\tRATIO"
         content = csv_path.read_text()
         lines = content.strip().split("\n")

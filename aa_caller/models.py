@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Dict, List
 
 
 class Qual:
@@ -145,7 +144,7 @@ class Qual:
         self.qual_type = qual_type.lower()
         self.quality_array = self._quality_to_numerical_array()
 
-    def _quality_to_numerical_array(self) -> List[float]:
+    def _quality_to_numerical_array(self) -> list[float]:
         """Map each character to the configured score table, defaulting to Sanger."""
         mapping = {
             "solexa13": self._SOLEXA13,
@@ -174,14 +173,14 @@ class Interval:
 @dataclass(slots=True)
 class Protein:
     """Stores the coordinates and description of a protein annotated in the reference.
-    
+
     Supports multi-interval proteins for frameshift, splicing, and circular origin-crossing.
     Intervals are 1-based inclusive and stored in order.
     """
     name: str
     description: str
     record_id: str
-    intervals: List[Interval]
+    intervals: list[Interval]
     strand: str = "+"
 
     @property
@@ -199,29 +198,29 @@ class Protein:
         return sum(interval.length() for interval in self.intervals)
 
     @classmethod
-    def from_string(cls, text: str, record_id: str = "") -> "Protein":
+    def from_string(cls, text: str, record_id: str = "") -> Protein:
         """Parse a single FASTA header fragment describing a protein interval.
-        
+
         Format: Name(Description):start-end or Name(Description):start1-end1,start2-end2;...
         Intervals are separated by semicolons, joined intervals by commas.
         """
         left, interval_text = text.split(":")
         name, desc = left.split("(")
         desc = desc.strip(")")
-        
+
         intervals = []
         if ";" in interval_text:
             interval_parts = interval_text.split(";")
         else:
             interval_parts = [interval_text]
-        
+
         for part in interval_parts:
             part = part.strip()
             if not part:
                 continue
             start, end = part.split("-")
             intervals.append(Interval(start=int(start), end=int(end)))
-        
+
         return cls(
             name=name,
             description=desc,
@@ -243,7 +242,7 @@ class Amplicon:
     end_coordinate: int
 
     @classmethod
-    def from_string(cls, line: str) -> "Amplicon":
+    def from_string(cls, line: str) -> Amplicon:
         """Translate a CSV/TSV record into the in-memory amplicon definition."""
         clean = line.strip().replace('"', "")
         parts = re.split(r"[\t,\s]+", clean)
@@ -272,4 +271,4 @@ class Variant:
     fw_freq: float = 0.0
     rv_freq: float = 0.0
     ratio: float = 0.0
-    amplicons: Dict[str, Dict[str, int]] = field(default_factory=dict)
+    amplicons: dict[str, dict[str, int]] = field(default_factory=dict)

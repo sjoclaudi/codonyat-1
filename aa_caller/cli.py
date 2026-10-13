@@ -4,10 +4,20 @@ import argparse
 import logging
 from pathlib import Path
 
-from .constants import DEFAULT_ENTROPY_THRESHOLD, DEFAULT_PROTEIN, DEFAULT_RATIO_LOWER, DEFAULT_RATIO_UPPER
+from .constants import (
+    DEFAULT_ENTROPY_THRESHOLD,
+    DEFAULT_PROTEIN,
+    DEFAULT_RATIO_LOWER,
+    DEFAULT_RATIO_UPPER,
+)
 from .container import SamContainer
 from .reference import FullReference
-from .validators import parse_amplicons, validate_amplicon_file, validate_reference_file, validate_sam_file
+from .validators import (
+    parse_amplicons,
+    validate_amplicon_file,
+    validate_reference_file,
+    validate_sam_file,
+)
 
 logger = logging.getLogger(__name__)
 

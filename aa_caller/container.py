@@ -5,7 +5,6 @@ import logging
 import math
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import Dict, List
 
 from .genetic_code import codon_to_aminoacid
 from .models import Variant
@@ -27,15 +26,15 @@ class SamContainer:
     ) -> None:
         """Initialize the container with the SAM path, ratio window, and entropy threshold."""
         self.sam_path = sam_path
-        self.reads: List[SamEntry] = []
-        self.variants: Dict[int, Dict[str, Variant]] = {}
+        self.reads: list[SamEntry] = []
+        self.variants: dict[int, dict[str, Variant]] = {}
         self.ratio_upper = ratio_upper
         self.ratio_lower = ratio_lower
         self.entropy_threshold = entropy_threshold
 
     def load(self) -> None:
         """Load every mapped read from the SAM file so they can be aggregated."""
-        with open(self.sam_path, "r") as fh:
+        with open(self.sam_path) as fh:
             for line in fh:
                 if line.startswith("@"):
                     continue
@@ -45,20 +44,20 @@ class SamContainer:
 
     def calculate_variant_frequencies(self, protein_name: str, reference: FullReference, record_id: str = None) -> None:
         """Walk every position of the requested protein and build variant histories.
-        
+
         Supports multi-interval proteins (frameshift, splicing, circular).
         """
         protein = reference.get_protein(protein_name, record_id)
         if protein is None:
             raise ValueError(f"Protein {protein_name} not found in reference")
-        
+
         codon_positions = self._get_codon_positions(protein, reference)
-        
+
         for pos, record_id in codon_positions:
-            variants: Dict[str, Variant] = {}
+            variants: dict[str, Variant] = {}
             fw_depth = 0
             rv_depth = 0
-            amplicons_info: Dict[str, Dict[str, int]] = {}
+            amplicons_info: dict[str, dict[str, int]] = {}
             for read in self.reads:
                 if not read.covers(pos):
                     continue
@@ -102,18 +101,18 @@ class SamContainer:
             self.calculate_shannon_entropy_single_position(pos)
             self.log_position_stats(pos)
 
-    def _get_codon_positions(self, protein, reference: FullReference) -> List[tuple]:
+    def _get_codon_positions(self, protein, reference: FullReference) -> list[tuple]:
         """Generate list of (position, record_id) tuples for all codons in the protein.
-        
+
         Handles multi-interval proteins including frameshifts.
         """
         positions = []
         current_offset = 0
-        
+
         for interval in protein.intervals:
             interval_length = interval.end - interval.start + 1
             pos = interval.start
-            
+
             while pos <= interval.end:
                 remaining_in_interval = interval.end - pos + 1
                 if remaining_in_interval >= 3:
@@ -121,9 +120,9 @@ class SamContainer:
                     pos += 3
                 else:
                     break
-            
+
             current_offset += interval_length
-        
+
         return positions
 
     def calculate_ratios_nucleotide(self, position: int) -> None:
@@ -153,7 +152,7 @@ class SamContainer:
         entry = self.variants.get(position)
         if not entry:
             return
-        aa_stats: Dict[str, Dict[str, float]] = {}
+        aa_stats: dict[str, dict[str, float]] = {}
         for variant in entry["variants"].values():
             aa = codon_to_aminoacid(variant.codon)
             stats = aa_stats.setdefault(aa, {"count": 0.0, "fw": 0.0, "rv": 0.0})
@@ -208,17 +207,17 @@ class SamContainer:
 
     def write_csv(self, sample_name: str, reference: FullReference, output_path: Path, *, protein_name: str = "RT") -> None:
         """Emit the variant summary as a TSV file that mirrors the Perl outputs.
-        
+
         For multi-record references, adds a RECORD column after REFERENCE.
         Single-record outputs remain byte-identical to 1.1.0.
         """
         has_multiple_records = len(reference.record_ids) > 1
-        
+
         fieldnames = ["FILE", "REFERENCE"]
         if has_multiple_records:
             fieldnames.append("RECORD")
         fieldnames.extend(["PROTEIN", "VARIANT", "POSITION", "FREQ", "FWCOV", "RVCOV", "TOTALCOV", "RATIO"])
-        
+
         with open(output_path, "w", newline="") as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames, delimiter="\t")
             writer.writeheader()

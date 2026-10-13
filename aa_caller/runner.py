@@ -1,13 +1,23 @@
-from argparse import Namespace, ArgumentParser
+from argparse import ArgumentParser, Namespace
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Mapping
+from typing import Any
 
-from .constants import DEFAULT_ENTROPY_THRESHOLD, DEFAULT_RATIO_LOWER, DEFAULT_RATIO_UPPER
+from .constants import (
+    DEFAULT_ENTROPY_THRESHOLD,
+    DEFAULT_RATIO_LOWER,
+    DEFAULT_RATIO_UPPER,
+)
 from .container import SamContainer
 from .models import Amplicon
 from .reference import FullReference
-from .validators import parse_amplicons, validate_amplicon_file, validate_reference_file, validate_sam_file
+from .validators import (
+    parse_amplicons,
+    validate_amplicon_file,
+    validate_reference_file,
+    validate_sam_file,
+)
 
 
 @dataclass
@@ -18,7 +28,7 @@ class VariantCallResult:
     xml_path: Path
     container: SamContainer
     reference: FullReference
-    amplicons: Dict[str, Amplicon]
+    amplicons: dict[str, Amplicon]
 
 
 def call_variants(
