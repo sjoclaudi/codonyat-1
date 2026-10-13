@@ -41,7 +41,7 @@ def validate_reference_file(path: Path, *, protein_name: str = "RT", annotation_
             break
 
     if not found_protein:
-        raise ValueError(f"Reference {path} headers are missing a {protein_name} protein annotation")
+        raise ValueError(f"Reference {path} header is missing an {protein_name} protein annotation")
 
 
 def validate_amplicon_file(path: Path) -> None:
