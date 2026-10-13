@@ -242,7 +242,7 @@ class TestHeaderBasedFrameshift:
         """Test frameshift protein defined in FASTA header."""
         fasta_path = tmp_path / "ref.fasta"
         fasta_path.write_text(">MN908947.3 ORF1ab(Polyprotein):266-13468,13468-21555\n" + "A" * 22000 + "\n")
-        
+
         ref = FullReference(fasta_path)
         protein = ref.get_protein("ORF1ab", "MN908947.3")
         assert protein is not None
@@ -261,25 +261,25 @@ class TestMultiRecordReads:
             ">Seg1 GeneA(ProteinA):1-30\nATGCCCTTTAAAGGGCCCAAAT TTGGGCCC\n"
             ">Seg2 GeneB(ProteinB):1-30\nTTTGGGCCCAAAGGGTTTACGTCGATCGAT\n"
         )
-        
+
         sam_path = tmp_path / "reads.sam"
         sam_path.write_text(
             "@HD\tVN:1.6\n@SQ\tSN:Seg1\tLN:30\n@SQ\tSN:Seg2\tLN:30\n"
             "read1\t0\tSeg1\t1\t30\t30M\t*\t0\t0\tATGCCCTTTAAAGGGCCCAAAT TTGGGCCC\tIIIIIIIIIIIIIIIIIIIIIIIIIIIIII\n"
             "read2\t0\tSeg2\t1\t30\t30M\t*\t0\t0\tTTTGGGCCCAAAGGGTTTACGTCGATCGAT\tIIIIIIIIIIIIIIIIIIIIIIIIIIIIII\n"
         )
-        
+
         amp_path = tmp_path / "amps.tsv"
         amp_path.write_text(
             "label\tprotein\treference\t5p\t3p\tstart\tend\n"
             "Amp_1\tGeneA\tSeg1\tATG\tCCC\t1\t30\n"
             "Amp_2\tGeneB\tSeg2\tTTT\tGAT\t1\t30\n"
         )
-        
+
         ref = FullReference(fasta_path)
         container = SamContainer(sam_path, DEFAULT_RATIO_UPPER, DEFAULT_RATIO_LOWER, DEFAULT_ENTROPY_THRESHOLD)
         container.load()
-        
+
         container.calculate_variant_frequencies("GeneA", ref, "Seg1")
         assert len(container.variants) == 10
         entry = container.variants[1]
@@ -293,25 +293,25 @@ class TestReferenceRecordColumns:
         """Test REFERENCE column value for single-record."""
         fasta_path = tmp_path / "ref.fasta"
         fasta_path.write_text(">MyRef GeneX(ProteinX):1-30\nATGCCCTTTAAAGGGCCCAAAT TTGGGCCC\n")
-        
+
         sam_path = tmp_path / "reads.sam"
         sam_path.write_text(
             "@HD\tVN:1.6\n@SQ\tSN:MyRef\tLN:30\n"
             "read1\t0\tMyRef\t1\t30\t30M\t*\t0\t0\tATGCCCTTTAAAGGGCCCAAAT TTGGGCCC\tIIIIIIIIIIIIIIIIIIIIIIIIIIIIII\n"
         )
-        
+
         amp_path = tmp_path / "amps.tsv"
         amp_path.write_text("label\tprotein\treference\t5p\t3p\tstart\tend\nAmp_1\tGeneX\tMyRef\tATG\tCCC\t1\t30\n")
-        
+
         ref = FullReference(fasta_path)
         container = SamContainer(sam_path, DEFAULT_RATIO_UPPER, DEFAULT_RATIO_LOWER, DEFAULT_ENTROPY_THRESHOLD)
         container.load()
         container.calculate_variant_frequencies("GeneX", ref)
-        
+
         import csv
         csv_path = tmp_path / "output.tsv"
         container.write_csv("sample", ref, csv_path, protein_name="GeneX")
-        
+
         with open(csv_path) as f:
             reader = csv.DictReader(f, delimiter="\t")
             rows = list(reader)
@@ -326,25 +326,25 @@ class TestReferenceRecordColumns:
             ">SegA GeneA(ProteinA):1-30\nATGCCCTTTAAAGGGCCCAAAT TTGGGCCC\n"
             ">SegB GeneB(ProteinB):1-30\nTTTGGGCCCAAAGGGTTTACGTCGATCGAT\n"
         )
-        
+
         sam_path = tmp_path / "reads.sam"
         sam_path.write_text(
             "@HD\tVN:1.6\n@SQ\tSN:SegA\tLN:30\n@SQ\tSN:SegB\tLN:30\n"
             "read1\t0\tSegB\t1\t30\t30M\t*\t0\t0\tTTTGGGCCCAAAGGGTTTACGTCGATCGAT\tIIIIIIIIIIIIIIIIIIIIIIIIIIIIII\n"
         )
-        
+
         amp_path = tmp_path / "amps.tsv"
         amp_path.write_text("label\tprotein\treference\t5p\t3p\tstart\tend\nAmp_2\tGeneB\tSegB\tTTT\tGAT\t1\t30\n")
-        
+
         ref = FullReference(fasta_path)
         container = SamContainer(sam_path, DEFAULT_RATIO_UPPER, DEFAULT_RATIO_LOWER, DEFAULT_ENTROPY_THRESHOLD)
         container.load()
         container.calculate_variant_frequencies("GeneB", ref, "SegB")
-        
+
         import csv
         csv_path = tmp_path / "output.tsv"
         container.write_csv("sample", ref, csv_path, protein_name="GeneB")
-        
+
         with open(csv_path) as f:
             reader = csv.DictReader(f, delimiter="\t")
             rows = list(reader)
@@ -361,43 +361,43 @@ class TestBackwardCompatibility:
         """
         import filecmp
         from pathlib import Path
-        
+
         test_data_dir = Path(__file__).parent / "data"
         fasta_path = test_data_dir / "hiv1_ref.fasta"
         sam_path = test_data_dir / "hiv1_reads.sam"
         amp_path = test_data_dir / "hiv1_amps.tsv"
         golden_tsv = test_data_dir / "hiv1_golden_v1.1.0.tsv"
         golden_xml = test_data_dir / "hiv1_golden_v1.1.0.xml"
-        
+
         assert fasta_path.exists(), "Test data missing: hiv1_ref.fasta"
         assert sam_path.exists(), "Test data missing: hiv1_reads.sam"
         assert amp_path.exists(), "Test data missing: hiv1_amps.tsv"
         assert golden_tsv.exists(), "Golden file missing: hiv1_golden_v1.1.0.tsv"
         assert golden_xml.exists(), "Golden file missing: hiv1_golden_v1.1.0.xml"
-        
+
         ref = FullReference(fasta_path)
         container = SamContainer(sam_path, DEFAULT_RATIO_UPPER, DEFAULT_RATIO_LOWER, DEFAULT_ENTROPY_THRESHOLD)
         container.load()
         container.calculate_variant_frequencies("RT", ref)
-        
+
         import tempfile
         with tempfile.TemporaryDirectory() as tmpdir:
             output_tsv = Path(tmpdir) / "output.tsv"
             output_xml = Path(tmpdir) / "output.xml"
-            
+
             container.write_csv("hiv1_reads.sam", ref, output_tsv, protein_name="RT")
             container.write_xml("hiv1_reads.sam", ref, output_xml)
-            
+
             tsv_match = filecmp.cmp(output_tsv, golden_tsv, shallow=False)
             xml_match = filecmp.cmp(output_xml, golden_xml, shallow=False)
-            
+
             if not tsv_match:
                 print(f"\n=== Expected TSV (v1.1.0) ===\n{golden_tsv.read_text()}")
                 print(f"\n=== Actual TSV (v1.2.0) ===\n{output_tsv.read_text()}")
-            
+
             if not xml_match:
                 print(f"\n=== Expected XML (v1.1.0) ===\n{golden_xml.read_text()[:500]}")
                 print(f"\n=== Actual XML (v1.2.0) ===\n{output_xml.read_text()[:500]}")
-            
+
             assert tsv_match, "TSV output is not byte-identical to v1.1.0"
             assert xml_match, "XML output is not byte-identical to v1.1.0"
