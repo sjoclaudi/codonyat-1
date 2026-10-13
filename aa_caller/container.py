@@ -59,6 +59,8 @@ class SamContainer:
             rv_depth = 0
             amplicons_info: dict[str, dict[str, int]] = {}
             for read in self.reads:
+                if read.reference != record_id:
+                    continue
                 if not read.covers(pos):
                     continue
                 codon = read.codon_at(pos)
