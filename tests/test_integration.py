@@ -11,14 +11,13 @@ from pathlib import Path
 import pytest
 
 from aa_caller.app import (
+    DEFAULT_ENTROPY_THRESHOLD,
+    DEFAULT_RATIO_LOWER,
+    DEFAULT_RATIO_UPPER,
     FullReference,
     SamContainer,
-    DEFAULT_RATIO_UPPER,
-    DEFAULT_RATIO_LOWER,
-    DEFAULT_ENTROPY_THRESHOLD,
 )
 from aa_caller.runner import call_variants, call_variants_from_args
-
 
 # ---------------------------------------------------------------------------
 # Helpers to create synthetic test data

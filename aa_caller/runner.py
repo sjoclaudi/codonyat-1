@@ -1,13 +1,23 @@
-from argparse import Namespace, ArgumentParser
+from argparse import ArgumentParser, Namespace
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Mapping
+from typing import Any
 
-from .constants import DEFAULT_ENTROPY_THRESHOLD, DEFAULT_RATIO_LOWER, DEFAULT_RATIO_UPPER
+from .constants import (
+    DEFAULT_ENTROPY_THRESHOLD,
+    DEFAULT_RATIO_LOWER,
+    DEFAULT_RATIO_UPPER,
+)
 from .container import SamContainer
 from .models import Amplicon
 from .reference import FullReference
-from .validators import parse_amplicons, validate_amplicon_file, validate_reference_file, validate_sam_file
+from .validators import (
+    parse_amplicons,
+    validate_amplicon_file,
+    validate_reference_file,
+    validate_sam_file,
+)
 
 
 @dataclass
@@ -18,7 +28,7 @@ class VariantCallResult:
     xml_path: Path
     container: SamContainer
     reference: FullReference
-    amplicons: Dict[str, Amplicon]
+    amplicons: dict[str, Amplicon]
 
 
 def call_variants(
@@ -26,6 +36,7 @@ def call_variants(
     reference_path: Path | str,
     amplicons_path: Path | str,
     *,
+    annotation_path: Path | str | None = None,
     ratio_upper: float = DEFAULT_RATIO_UPPER,
     ratio_lower: float = DEFAULT_RATIO_LOWER,
     entropy_threshold: float = DEFAULT_ENTROPY_THRESHOLD,
@@ -38,13 +49,14 @@ def call_variants(
     sam_path = Path(sam_path)
     reference_path = Path(reference_path)
     amplicons_path = Path(amplicons_path)
+    annotation_path = Path(annotation_path) if annotation_path else None
 
     validate_sam_file(sam_path)
-    validate_reference_file(reference_path, protein_name=protein)
+    validate_reference_file(reference_path, protein_name=protein, annotation_path=annotation_path)
     validate_amplicon_file(amplicons_path)
 
     amplicons = parse_amplicons(amplicons_path)
-    reference = FullReference(reference_path)
+    reference = FullReference(reference_path, annotation_path=annotation_path)
     container = SamContainer(
         sam_path,
         ratio_upper=ratio_upper,
@@ -87,6 +99,7 @@ def call_variants_from_args(
     sam = _pick("sam_file", _pick("sam_path"))
     reference = _pick("reference_file", _pick("reference_path"))
     amplicons = _pick("amplicons_file", _pick("amplicons_path"))
+    annotation = _pick("annotation", _pick("annotation_path"))
     if not (sam and reference and amplicons):
         raise ValueError("args must include sam_file/reference_file/amplicons_file")
 
@@ -102,6 +115,7 @@ def call_variants_from_args(
         sam_path=sam,
         reference_path=reference,
         amplicons_path=amplicons,
+        annotation_path=annotation,
         ratio_upper=effective_ratio_upper,
         ratio_lower=effective_ratio_lower,
         entropy_threshold=effective_entropy_threshold,
@@ -114,10 +128,11 @@ def call_variants_from_args(
 def runner_cli() -> None:
     """Simple CLI that forwards parsed arguments to `call_variants_from_args`."""
 
-    parser = ArgumentParser(description="Run the codonyat variant caller from Python")
+    parser = ArgumentParser(description="Run the codonyat variant caller from Python. Research use only.")
     parser.add_argument("sam_file", type=Path, help="Path to the input SAM file")
-    parser.add_argument("reference_file", type=Path, help="FASTA reference with RT annotations")
+    parser.add_argument("reference_file", type=Path, help="FASTA reference with protein annotations")
     parser.add_argument("amplicons_file", type=Path, help="Amplicon TSV/CSV describing primers")
+    parser.add_argument("--annotation", type=Path, help="Optional TSV annotation file")
     parser.add_argument("--ratio-upper", type=float, default=DEFAULT_RATIO_UPPER, help="Upper bound for strand balance")
     parser.add_argument("--ratio-lower", type=float, default=DEFAULT_RATIO_LOWER, help="Lower bound for strand balance")
     parser.add_argument("--entropy-threshold", type=float, default=DEFAULT_ENTROPY_THRESHOLD, help="Minimum entropy to mark a position")

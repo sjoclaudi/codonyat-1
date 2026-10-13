@@ -3,7 +3,6 @@ from __future__ import annotations
 __all__ = ["SamEntry"]
 
 import re
-from typing import Dict
 
 from .models import Qual
 
@@ -57,7 +56,7 @@ class SamEntry:
                 total += int(length)
         return total
 
-    def _build_ref_to_read_map(self) -> Dict[int, int | None]:
+    def _build_ref_to_read_map(self) -> dict[int, int | None]:
         """Walk the CIGAR string and build a mapping from reference positions to read positions.
 
         CIGAR operations:
@@ -67,7 +66,7 @@ class SamEntry:
         - S: consume query only (skip in reference mapping)
         - H/P: consume neither
         """
-        ref_to_read: Dict[int, Optional[int]] = {}
+        ref_to_read: dict[int, Optional[int]] = {}
         ops = _CIGAR_RE.findall(self.cigar)
         ref_pos = self.coordinate
         read_pos = 0

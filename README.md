@@ -39,11 +39,18 @@ Once installed, the `codonyat` entry point is available:
 codonyat sample.sam reference.fasta amplicons.tsv
 ```
 
+For multi-record references or complex annotations:
+
+```bash
+codonyat sample.sam reference.fasta amplicons.tsv --annotation annotations.tsv --protein S
+```
+
 ### Options
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--protein` | `RT` | Target protein name (must match a FASTA header annotation) |
+| `--annotation` | None | Optional TSV annotation file (record, protein, description, intervals, strand) |
+| `--protein` | `RT` | Target protein name (must match a FASTA header or TSV annotation) |
 | `--ratio-upper` | `3.162` | Upper bound for strand-ratio balancing |
 | `--ratio-lower` | `0.316` | Lower bound for strand-ratio balancing |
 | `--entropy-threshold` | `0.0` | Minimum Shannon entropy to mark a position as diverse |
@@ -52,17 +59,49 @@ codonyat sample.sam reference.fasta amplicons.tsv
 
 The CLI writes two files alongside the input SAM:
 
-- `[sam-file].tsv` — columns: FILE, REFERENCE, PROTEIN, VARIANT, POSITION, FREQ, FWCOV, RVCOV, TOTALCOV, RATIO
+- `[sam-file].tsv` — TSV with columns: FILE, REFERENCE, [RECORD], PROTEIN, VARIANT, POSITION, FREQ, FWCOV, RVCOV, TOTALCOV, RATIO
+  - The RECORD column is added only for multi-record references (v1.2.0+)
+  - Single-record outputs remain byte-identical to v1.1.0
+  - Rows are ordered by genomic position (codon index) along the protein's intervals
+  - For multi-interval proteins, this follows the biological reading order through all segments
 - `[sam-file].xml` — per-position `<Depth>`, `<FwCover>`, `<RvCover>`, `<Variants>`
 
 ### Reference FASTA format
 
-The reference FASTA header must include protein annotations in the format `Name(Description):start-end`, separated by semicolons:
+The reference FASTA supports both single-record and multi-record files. Protein annotations can be provided either in the FASTA header or via a separate TSV file.
+
+#### FASTA header annotation (backward compatible)
+
+Protein annotations in the format `Name(Description):start-end`, separated by semicolons:
 
 ```
 >K03455|HIVHXB2CG PR(Protease):2253-2549;RT(Reverse Transcriptase):2550-3869;INT(Integrase):4230-5093
 TGGAAGGGCTAATTCACTCCCAACGAAGAC...
 ```
+
+#### Multi-interval proteins
+
+For proteins spanning multiple intervals (frameshift, splicing, or circular origin-crossing), use comma-separated intervals. All coordinates are **1-based inclusive**:
+
+```
+>MN908947.3 ORF1ab(Polyprotein):266-13468,13468-21555
+ATTAAAGGTTTATACCTTCCCAGGTAACAA...
+```
+
+The interval `266-13468,13468-21555` represents a -1 programmed ribosomal frameshift where base 13468 is read twice. Semicolons separate different proteins in the header.
+
+#### TSV annotation format (v1.2.0+)
+
+For complex annotations, use a TSV file with the `--annotation` flag:
+
+```
+record	protein	description	intervals	strand
+MN908947.3	S	Spike glycoprotein	21563-25384	+
+MN908947.3	ORF1ab	Polyprotein	266-13468;13468-21555	+
+NC_003977.2	P	DNA polymerase	2307-3221;1-1623	+
+```
+
+**Important**: Minus-strand genes are not supported and will be rejected with a clear error message.
 
 ## Package API
 
