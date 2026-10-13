@@ -62,6 +62,8 @@ The CLI writes two files alongside the input SAM:
 - `[sam-file].tsv` — TSV with columns: FILE, REFERENCE, [RECORD], PROTEIN, VARIANT, POSITION, FREQ, FWCOV, RVCOV, TOTALCOV, RATIO
   - The RECORD column is added only for multi-record references (v1.2.0+)
   - Single-record outputs remain byte-identical to v1.1.0
+  - Rows are ordered by genomic position (codon index) along the protein's intervals
+  - For multi-interval proteins, this follows the biological reading order through all segments
 - `[sam-file].xml` — per-position `<Depth>`, `<FwCover>`, `<RvCover>`, `<Variants>`
 
 ### Reference FASTA format
