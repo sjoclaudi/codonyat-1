@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "codonyat"
-version = "1.0.3"
+version = "1.2.0"
 description = "codon-yat — A codon-aware (Yet Another) amino acid variant typer from SAM alignments of viral NGS data."
 readme = "README.md"
 requires-python = ">=3.10"
