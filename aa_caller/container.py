@@ -43,25 +43,29 @@ class SamContainer:
                 if entry.is_mapped():
                     self.reads.append(entry)
 
-    def calculate_variant_frequencies(self, protein_name: str, reference: FullReference) -> None:
-        """Walk every RT position of the requested protein and build variant histories."""
-        if protein_name not in reference.proteins:
+    def calculate_variant_frequencies(self, protein_name: str, reference: FullReference, record_id: str = None) -> None:
+        """Walk every position of the requested protein and build variant histories.
+        
+        Supports multi-interval proteins (frameshift, splicing, circular).
+        """
+        protein = reference.get_protein(protein_name, record_id)
+        if protein is None:
             raise ValueError(f"Protein {protein_name} not found in reference")
-        protein = reference.proteins[protein_name]
-        for pos in range(protein.start_coordinate, protein.end_coordinate, 3):
+        
+        codon_positions = self._get_codon_positions(protein, reference)
+        
+        for pos, record_id in codon_positions:
             variants: Dict[str, Variant] = {}
             fw_depth = 0
             rv_depth = 0
             amplicons_info: Dict[str, Dict[str, int]] = {}
             for read in self.reads:
-                # only consider reads that fully span the queried codon
                 if not read.covers(pos):
                     continue
                 codon = read.codon_at(pos)
                 if not codon or len(codon) < 3:
                     continue
                 depth_increment = read.occurences
-                # track forward/reverse depth separately for ratio calculations
                 if read.orientation == "F":
                     fw_depth += depth_increment
                 else:
@@ -73,14 +77,12 @@ class SamContainer:
                 else:
                     variant.rv_reads += depth_increment
                 amplicon_label = read.amplicon or "Amp_NONE"
-                # record how each amplicon contributes to the variant counts
                 amp_variant = variant.amplicons.setdefault(amplicon_label, {"fw": 0, "rv": 0})
                 if read.orientation == "F":
                     amp_variant["fw"] += depth_increment
                 else:
                     amp_variant["rv"] += depth_increment
                 amp_position = amplicons_info.setdefault(amplicon_label, {"fw_depth": 0, "rv_depth": 0, "depth": 0})
-                # accumulate per-amplicon depth metrics for downstream reporting
                 if read.orientation == "F":
                     amp_position["fw_depth"] += depth_increment
                 else:
@@ -92,13 +94,37 @@ class SamContainer:
                 "rv_depth": rv_depth,
                 "depth": fw_depth + rv_depth,
                 "amplicons": amplicons_info,
+                "record_id": record_id,
             }
-            # cache the computed metrics for this protein position
             self.variants[pos] = entry
             self.calculate_ratios_nucleotide(pos)
             self.calculate_ratios_aminoacid(pos)
             self.calculate_shannon_entropy_single_position(pos)
             self.log_position_stats(pos)
+
+    def _get_codon_positions(self, protein, reference: FullReference) -> List[tuple]:
+        """Generate list of (position, record_id) tuples for all codons in the protein.
+        
+        Handles multi-interval proteins including frameshifts.
+        """
+        positions = []
+        current_offset = 0
+        
+        for interval in protein.intervals:
+            interval_length = interval.end - interval.start + 1
+            pos = interval.start
+            
+            while pos <= interval.end:
+                remaining_in_interval = interval.end - pos + 1
+                if remaining_in_interval >= 3:
+                    positions.append((pos, protein.record_id))
+                    pos += 3
+                else:
+                    break
+            
+            current_offset += interval_length
+        
+        return positions
 
     def calculate_ratios_nucleotide(self, position: int) -> None:
         """Determine strand-specific ratios per variant and flag the balanced reads."""
@@ -181,41 +207,41 @@ class SamContainer:
         )
 
     def write_csv(self, sample_name: str, reference: FullReference, output_path: Path, *, protein_name: str = "RT") -> None:
-        """Emit the variant summary as a TSV file that mirrors the Perl outputs."""
-        fieldnames = [
-            "FILE",
-            "REFERENCE",
-            "PROTEIN",
-            "VARIANT",
-            "POSITION",
-            "FREQ",
-            "FWCOV",
-            "RVCOV",
-            "TOTALCOV",
-            "RATIO",
-        ]
+        """Emit the variant summary as a TSV file that mirrors the Perl outputs.
+        
+        For multi-record references, adds a RECORD column after REFERENCE.
+        Single-record outputs remain byte-identical to 1.1.0.
+        """
+        has_multiple_records = len(reference.record_ids) > 1
+        
+        fieldnames = ["FILE", "REFERENCE"]
+        if has_multiple_records:
+            fieldnames.append("RECORD")
+        fieldnames.extend(["PROTEIN", "VARIANT", "POSITION", "FREQ", "FWCOV", "RVCOV", "TOTALCOV", "RATIO"])
+        
         with open(output_path, "w", newline="") as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames, delimiter="\t")
             writer.writeheader()
             for pos, entry in sorted(self.variants.items()):
                 depth = entry["depth"]
                 ratio = entry["fw_depth"] / entry["rv_depth"] if entry["rv_depth"] else 0
+                record_id = entry.get("record_id", reference.id)
                 for variant in entry["variants"].values():
-                    # emit each variant using the cached depths and ratios
-                    writer.writerow(
-                        {
-                            "FILE": sample_name,
-                            "REFERENCE": reference.id,
-                            "PROTEIN": protein_name,
-                            "VARIANT": variant.codon,
-                            "POSITION": pos,
-                            "FREQ": round((variant.count / depth * 100) if depth else 0, 3),
-                            "FWCOV": entry["fw_depth"],
-                            "RVCOV": entry["rv_depth"],
-                            "TOTALCOV": depth,
-                            "RATIO": round(ratio, 3),
-                        }
-                    )
+                    row = {
+                        "FILE": sample_name,
+                        "REFERENCE": reference.id,
+                        "PROTEIN": protein_name,
+                        "VARIANT": variant.codon,
+                        "POSITION": pos,
+                        "FREQ": round((variant.count / depth * 100) if depth else 0, 3),
+                        "FWCOV": entry["fw_depth"],
+                        "RVCOV": entry["rv_depth"],
+                        "TOTALCOV": depth,
+                        "RATIO": round(ratio, 3),
+                    }
+                    if has_multiple_records:
+                        row["RECORD"] = record_id
+                    writer.writerow(row)
 
     def write_xml(self, sample_name: str, reference: FullReference, output_path: Path) -> None:
         """Dump the internal state into XML for downstream diagnostics."""

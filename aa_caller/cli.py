@@ -15,10 +15,17 @@ logger = logging.getLogger(__name__)
 def main() -> None:
     """Command-line entry point that wires inputs/key outputs together."""
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-    parser = argparse.ArgumentParser(description="Standalone RT variant collector")
+    parser = argparse.ArgumentParser(
+        description="Codon-aware amino acid variant typer from SAM alignments. Research use only."
+    )
     parser.add_argument("sam_file", type=Path)
     parser.add_argument("reference_file", type=Path)
     parser.add_argument("amplicons_file", type=Path)
+    parser.add_argument(
+        "--annotation",
+        type=Path,
+        help="Optional TSV annotation file (record, protein, description, intervals, strand)",
+    )
     parser.add_argument(
         "--ratio-upper",
         type=float,
@@ -51,21 +58,21 @@ def main() -> None:
         parser.error(f"Reference file {args.reference_file} does not exist")
     if not args.amplicons_file.exists():
         parser.error(f"Amplicon file {args.amplicons_file} does not exist")
+    if args.annotation and not args.annotation.exists():
+        parser.error(f"Annotation file {args.annotation} does not exist")
 
     logger.info("Validating input formats before parsing")
     validate_sam_file(args.sam_file)
-    validate_reference_file(args.reference_file, protein_name=args.protein)
+    validate_reference_file(args.reference_file, protein_name=args.protein, annotation_path=args.annotation)
     validate_amplicon_file(args.amplicons_file)
 
     logger.info("Reading amplicon configuration")
     parse_amplicons(args.amplicons_file)
 
     logger.info("Loading reference")
-    # reference contains the RT protein coordinates used for variant calling
-    reference = FullReference(args.reference_file)
+    reference = FullReference(args.reference_file, annotation_path=args.annotation)
 
     logger.info("Parsing SAM entries")
-    # load every mapped read from the SAM file into the working buffer
     container = SamContainer(
         args.sam_file,
         ratio_upper=args.ratio_upper,
@@ -80,7 +87,6 @@ def main() -> None:
     csv_path = args.sam_file.with_suffix(args.sam_file.suffix + ".tsv")
     xml_path = args.sam_file.with_suffix(args.sam_file.suffix + ".xml")
     logger.info("Writing TSV results")
-    # final exports mirror the Perl output format consumed by downstream workflows
     container.write_csv(str(args.sam_file), reference, csv_path, protein_name=args.protein)
     logger.info("Writing XML dump")
     container.write_xml(str(args.sam_file), reference, xml_path)

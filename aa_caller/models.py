@@ -161,21 +161,74 @@ class Qual:
 
 
 @dataclass(slots=True)
+class Interval:
+    """Represents a single genomic interval (start, end) for a protein segment."""
+    start: int
+    end: int
+
+    def length(self) -> int:
+        """Return the length of this interval."""
+        return self.end - self.start + 1
+
+
+@dataclass(slots=True)
 class Protein:
-    """Stores the coordinates and description of a protein annotated in the reference."""
+    """Stores the coordinates and description of a protein annotated in the reference.
+    
+    Supports multi-interval proteins for frameshift, splicing, and circular origin-crossing.
+    Intervals are 1-based inclusive and stored in order.
+    """
     name: str
     description: str
-    start_coordinate: int
-    end_coordinate: int
+    record_id: str
+    intervals: List[Interval]
+    strand: str = "+"
+
+    @property
+    def start_coordinate(self) -> int:
+        """Return the start of the first interval for backward compatibility."""
+        return self.intervals[0].start if self.intervals else 0
+
+    @property
+    def end_coordinate(self) -> int:
+        """Return the end of the last interval for backward compatibility."""
+        return self.intervals[-1].end if self.intervals else 0
+
+    def total_length(self) -> int:
+        """Return the total length across all intervals."""
+        return sum(interval.length() for interval in self.intervals)
 
     @classmethod
-    def from_string(cls, text: str) -> "Protein":
-        """Parse a single FASTA header fragment describing a protein interval."""
-        left, interval = text.split(":")
+    def from_string(cls, text: str, record_id: str = "") -> "Protein":
+        """Parse a single FASTA header fragment describing a protein interval.
+        
+        Format: Name(Description):start-end or Name(Description):start1-end1,start2-end2;...
+        Intervals are separated by semicolons, joined intervals by commas.
+        """
+        left, interval_text = text.split(":")
         name, desc = left.split("(")
         desc = desc.strip(")")
-        start, end = interval.split("-")
-        return cls(name=name, description=desc, start_coordinate=int(start), end_coordinate=int(end))
+        
+        intervals = []
+        if ";" in interval_text:
+            interval_parts = interval_text.split(";")
+        else:
+            interval_parts = [interval_text]
+        
+        for part in interval_parts:
+            part = part.strip()
+            if not part:
+                continue
+            start, end = part.split("-")
+            intervals.append(Interval(start=int(start), end=int(end)))
+        
+        return cls(
+            name=name,
+            description=desc,
+            record_id=record_id,
+            intervals=intervals,
+            strand="+"
+        )
 
 
 @dataclass(slots=True)
