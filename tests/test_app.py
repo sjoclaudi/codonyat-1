@@ -59,7 +59,7 @@ def test_validate_reference_file_accepts_rt(tmp_path: Path) -> None:
 def test_validate_reference_file_rejects_missing_rt(tmp_path: Path) -> None:
     fasta = tmp_path / "ref.fasta"
     _write_fasta(fasta, "ref POL(Polymerase):1-99")
-    with pytest.raises(ValueError, match="missing an RT protein annotation"):
+    with pytest.raises(ValueError, match="missing a RT protein annotation"):
         app.validate_reference_file(fasta)
 
 
