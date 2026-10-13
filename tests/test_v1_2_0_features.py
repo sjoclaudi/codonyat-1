@@ -34,8 +34,8 @@ class TestMultiIntervalProtein:
         assert protein.end_coordinate == 200
 
     def test_multi_interval_frameshift(self) -> None:
-        """Parse frameshift with semicolon-separated intervals."""
-        protein = Protein.from_string("ORF1ab(Polyprotein):266-13468;13468-21555", record_id="MN908947.3")
+        """Parse frameshift with comma-separated intervals."""
+        protein = Protein.from_string("ORF1ab(Polyprotein):266-13468,13468-21555", record_id="MN908947.3")
         assert protein.name == "ORF1ab"
         assert len(protein.intervals) == 2
         assert protein.intervals[0].start == 266
@@ -47,7 +47,7 @@ class TestMultiIntervalProtein:
 
     def test_multi_interval_circular(self) -> None:
         """Parse circular origin-crossing protein."""
-        protein = Protein.from_string("P(Polymerase):2307-3221;1-1623", record_id="NC_003977.2")
+        protein = Protein.from_string("P(Polymerase):2307-3221,1-1623", record_id="NC_003977.2")
         assert protein.name == "P"
         assert len(protein.intervals) == 2
         assert protein.intervals[0].start == 2307
