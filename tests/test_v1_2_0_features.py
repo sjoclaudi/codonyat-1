@@ -237,6 +237,122 @@ class TestMultiRecordOutput:
 # Backward compatibility regression test
 # ---------------------------------------------------------------------------
 
+class TestHeaderBasedFrameshift:
+    def test_header_frameshift_parsing(self, tmp_path: Path) -> None:
+        """Test frameshift protein defined in FASTA header."""
+        fasta_path = tmp_path / "ref.fasta"
+        fasta_path.write_text(">MN908947.3 ORF1ab(Polyprotein):266-13468,13468-21555\n" + "A" * 22000 + "\n")
+        
+        ref = FullReference(fasta_path)
+        protein = ref.get_protein("ORF1ab", "MN908947.3")
+        assert protein is not None
+        assert len(protein.intervals) == 2
+        assert protein.intervals[0].start == 266
+        assert protein.intervals[0].end == 13468
+        assert protein.intervals[1].start == 13468
+        assert protein.intervals[1].end == 21555
+
+
+class TestMultiRecordReads:
+    def test_reads_filtered_by_record(self, tmp_path: Path) -> None:
+        """Test that reads from different records don't mix."""
+        fasta_path = tmp_path / "ref.fasta"
+        fasta_path.write_text(
+            ">Seg1 GeneA(ProteinA):1-30\nATGCCCTTTAAAGGGCCCAAAT TTGGGCCC\n"
+            ">Seg2 GeneB(ProteinB):1-30\nTTTGGGCCCAAAGGGTTTACGTCGATCGAT\n"
+        )
+        
+        sam_path = tmp_path / "reads.sam"
+        sam_path.write_text(
+            "@HD\tVN:1.6\n@SQ\tSN:Seg1\tLN:30\n@SQ\tSN:Seg2\tLN:30\n"
+            "read1\t0\tSeg1\t1\t30\t30M\t*\t0\t0\tATGCCCTTTAAAGGGCCCAAAT TTGGGCCC\tIIIIIIIIIIIIIIIIIIIIIIIIIIIIII\n"
+            "read2\t0\tSeg2\t1\t30\t30M\t*\t0\t0\tTTTGGGCCCAAAGGGTTTACGTCGATCGAT\tIIIIIIIIIIIIIIIIIIIIIIIIIIIIII\n"
+        )
+        
+        amp_path = tmp_path / "amps.tsv"
+        amp_path.write_text(
+            "label\tprotein\treference\t5p\t3p\tstart\tend\n"
+            "Amp_1\tGeneA\tSeg1\tATG\tCCC\t1\t30\n"
+            "Amp_2\tGeneB\tSeg2\tTTT\tGAT\t1\t30\n"
+        )
+        
+        ref = FullReference(fasta_path)
+        container = SamContainer(sam_path, DEFAULT_RATIO_UPPER, DEFAULT_RATIO_LOWER, DEFAULT_ENTROPY_THRESHOLD)
+        container.load()
+        
+        container.calculate_variant_frequencies("GeneA", ref, "Seg1")
+        assert len(container.variants) == 10
+        entry = container.variants[1]
+        assert entry["depth"] == 1
+        assert "ATG" in entry["variants"]
+        assert "TTT" not in entry["variants"]
+
+
+class TestReferenceRecordColumns:
+    def test_reference_record_values_single(self, tmp_path: Path) -> None:
+        """Test REFERENCE column value for single-record."""
+        fasta_path = tmp_path / "ref.fasta"
+        fasta_path.write_text(">MyRef GeneX(ProteinX):1-30\nATGCCCTTTAAAGGGCCCAAAT TTGGGCCC\n")
+        
+        sam_path = tmp_path / "reads.sam"
+        sam_path.write_text(
+            "@HD\tVN:1.6\n@SQ\tSN:MyRef\tLN:30\n"
+            "read1\t0\tMyRef\t1\t30\t30M\t*\t0\t0\tATGCCCTTTAAAGGGCCCAAAT TTGGGCCC\tIIIIIIIIIIIIIIIIIIIIIIIIIIIIII\n"
+        )
+        
+        amp_path = tmp_path / "amps.tsv"
+        amp_path.write_text("label\tprotein\treference\t5p\t3p\tstart\tend\nAmp_1\tGeneX\tMyRef\tATG\tCCC\t1\t30\n")
+        
+        ref = FullReference(fasta_path)
+        container = SamContainer(sam_path, DEFAULT_RATIO_UPPER, DEFAULT_RATIO_LOWER, DEFAULT_ENTROPY_THRESHOLD)
+        container.load()
+        container.calculate_variant_frequencies("GeneX", ref)
+        
+        import csv
+        csv_path = tmp_path / "output.tsv"
+        container.write_csv("sample", ref, csv_path, protein_name="GeneX")
+        
+        with open(csv_path) as f:
+            reader = csv.DictReader(f, delimiter="\t")
+            rows = list(reader)
+            assert len(rows) > 0
+            assert rows[0]["REFERENCE"] == "MyRef"
+            assert "RECORD" not in rows[0]
+
+    def test_reference_record_values_multi(self, tmp_path: Path) -> None:
+        """Test REFERENCE and RECORD column values for multi-record."""
+        fasta_path = tmp_path / "ref.fasta"
+        fasta_path.write_text(
+            ">SegA GeneA(ProteinA):1-30\nATGCCCTTTAAAGGGCCCAAAT TTGGGCCC\n"
+            ">SegB GeneB(ProteinB):1-30\nTTTGGGCCCAAAGGGTTTACGTCGATCGAT\n"
+        )
+        
+        sam_path = tmp_path / "reads.sam"
+        sam_path.write_text(
+            "@HD\tVN:1.6\n@SQ\tSN:SegA\tLN:30\n@SQ\tSN:SegB\tLN:30\n"
+            "read1\t0\tSegB\t1\t30\t30M\t*\t0\t0\tTTTGGGCCCAAAGGGTTTACGTCGATCGAT\tIIIIIIIIIIIIIIIIIIIIIIIIIIIIII\n"
+        )
+        
+        amp_path = tmp_path / "amps.tsv"
+        amp_path.write_text("label\tprotein\treference\t5p\t3p\tstart\tend\nAmp_2\tGeneB\tSegB\tTTT\tGAT\t1\t30\n")
+        
+        ref = FullReference(fasta_path)
+        container = SamContainer(sam_path, DEFAULT_RATIO_UPPER, DEFAULT_RATIO_LOWER, DEFAULT_ENTROPY_THRESHOLD)
+        container.load()
+        container.calculate_variant_frequencies("GeneB", ref, "SegB")
+        
+        import csv
+        csv_path = tmp_path / "output.tsv"
+        container.write_csv("sample", ref, csv_path, protein_name="GeneB")
+        
+        with open(csv_path) as f:
+            reader = csv.DictReader(f, delimiter="\t")
+            rows = list(reader)
+            assert len(rows) > 0
+            assert rows[0]["REFERENCE"] == "SegB"
+            assert rows[0]["RECORD"] == "SegB"
+
+
 class TestBackwardCompatibility:
     def test_single_record_single_interval_byte_identical(self) -> None:
         """Single-record, single-interval output should be byte-identical to v1.1.0.
