@@ -356,7 +356,7 @@ class TestReferenceRecordColumns:
 class TestBackwardCompatibility:
     def test_single_record_single_interval_byte_identical(self) -> None:
         """Single-record, single-interval output should be byte-identical to v1.1.0.
-        
+
         Uses golden files generated from codonyat==1.1.0 from PyPI on real HIV-1 data.
         """
         import filecmp
