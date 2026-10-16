@@ -2,6 +2,31 @@
 
 All notable changes to codonyat are documented in this file.
 
+## [1.3.0] - 2026-10-16
+
+Research use only. All 1.3.0 features are **opt-in**. Default TSV and XML remain
+byte-identical to 1.2.1 (and therefore to 1.1.0 on single-record HIV-1).
+
+### Added
+- **`--min-baseq`**: if set, count a codon only when all three bases pass that
+  Phred-like quality. Off by default.
+- **`--stats PATH`**: sidecar TSV with per-variant Wilson 95% CI, two-sided
+  Fisher's exact strand-bias p-value, and flags `lowfreq`, `sb`, `lowcov`; plus
+  per-codon and per-gene Shannon (raw and normalised), Gini–Simpson, nucleotide π
+  and amino-acid π. Codons containing N or gaps are excluded from diversity.
+- **`--aavf PATH`**: AAVF v1.0 writer (`##fileformat=AAVFv1.0`). FILTER uses the
+  stats flags. CAT and SRVL are never emitted. Partial/gapped codons map to `X`;
+  amino-acid indels are not called. Header source is
+  `codonyat-1.3.0 (research use only)`. `##reference` is the FASTA filename;
+  each record is listed as `##contig=<ID=...,length=...>`.
+- Threshold flags used only by `--stats` / `--aavf`: `--min-freq` (default 0.01),
+  `--min-coverage` (default 10), `--sb-alpha` (default 0.05).
+- Methods note with citations: [docs/methods.md](docs/methods.md).
+
+### Unchanged
+- Default TSV/XML columns, values, and layout when the new flags are omitted.
+- No Nextflow content in this repository.
+
 ## [1.2.1] - 2026-10-16
 
 ### Fixed

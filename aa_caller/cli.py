@@ -4,6 +4,7 @@ import argparse
 import logging
 from pathlib import Path
 
+from .cli_options import add_research_output_args
 from .constants import (
     DEFAULT_ENTROPY_THRESHOLD,
     DEFAULT_PROTEIN,
@@ -64,6 +65,7 @@ def main() -> None:
             "every protein annotated in the reference header."
         ),
     )
+    add_research_output_args(parser)
     args = parser.parse_args()
 
     if not args.sam_file.exists():
@@ -103,6 +105,7 @@ def main() -> None:
         ratio_upper=args.ratio_upper,
         ratio_lower=args.ratio_lower,
         entropy_threshold=args.entropy_threshold,
+        min_baseq=args.min_baseq,
     )
     container.load()
 
@@ -120,3 +123,26 @@ def main() -> None:
         container.write_csv_proteins(str(args.sam_file), reference, csv_path, protein_names)
         logger.info("Writing XML dump")
         container.write_xml_proteins(str(args.sam_file), reference, xml_path, protein_names)
+
+    if args.stats:
+        logger.info("Writing stats TSV")
+        container.write_stats(
+            str(args.sam_file),
+            reference,
+            args.stats,
+            protein_names,
+            min_freq=args.min_freq,
+            min_coverage=args.min_coverage,
+            sb_alpha=args.sb_alpha,
+        )
+    if args.aavf:
+        logger.info("Writing AAVF")
+        container.write_aavf(
+            str(args.sam_file),
+            reference,
+            args.aavf,
+            protein_names,
+            min_freq=args.min_freq,
+            min_coverage=args.min_coverage,
+            sb_alpha=args.sb_alpha,
+        )

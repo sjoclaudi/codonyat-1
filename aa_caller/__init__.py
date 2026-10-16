@@ -1,6 +1,7 @@
 """Light wrapper to expose the RT variant caller as a package."""
 
 from .cli import main
+from .constants import PACKAGE_VERSION
 from .container import SamContainer
 from .reference import FullReference
 from .runner import (
@@ -23,3 +24,5 @@ __all__ = [
     "SamEntry",
     "parse_amplicons",
 ]
+
+__version__ = PACKAGE_VERSION

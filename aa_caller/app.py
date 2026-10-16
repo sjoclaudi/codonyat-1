@@ -6,9 +6,13 @@ Existing code that does ``from aa_caller.app import X`` continues to work.
 from .cli import main  # noqa: F401
 from .constants import (  # noqa: F401
     DEFAULT_ENTROPY_THRESHOLD,
+    DEFAULT_MIN_COVERAGE,
+    DEFAULT_MIN_FREQ,
     DEFAULT_PROTEIN,
     DEFAULT_RATIO_LOWER,
     DEFAULT_RATIO_UPPER,
+    DEFAULT_SB_ALPHA,
+    PACKAGE_VERSION,
 )
 from .container import SamContainer  # noqa: F401
 from .genetic_code import GENETIC_CODE, codon_to_aminoacid  # noqa: F401

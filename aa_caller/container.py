@@ -24,6 +24,7 @@ class SamContainer:
         ratio_upper: float,
         ratio_lower: float,
         entropy_threshold: float,
+        min_baseq: float | None = None,
     ) -> None:
         """Initialize the container with the SAM path, ratio window, and entropy threshold."""
         self.sam_path = sam_path
@@ -34,6 +35,7 @@ class SamContainer:
         self.ratio_upper = ratio_upper
         self.ratio_lower = ratio_lower
         self.entropy_threshold = entropy_threshold
+        self.min_baseq = min_baseq
 
     def load(self) -> None:
         """Load every mapped read from the SAM file so they can be aggregated."""
@@ -90,7 +92,9 @@ class SamContainer:
         jobs: list[tuple[Protein, dict[int, dict]]] = []
         for protein in proteins:
             entries: dict[int, dict] = {}
+            aa_pos = 0
             for pos, record_id in self._get_codon_positions(protein, reference):
+                aa_pos += 1
                 entries[pos] = {
                     "variants": {},
                     "fw_depth": 0,
@@ -98,6 +102,7 @@ class SamContainer:
                     "depth": 0,
                     "amplicons": {},
                     "record_id": record_id,
+                    "aa_pos": aa_pos,
                 }
             jobs.append((protein, entries))
 
@@ -128,6 +133,10 @@ class SamContainer:
         codon = read.codon_at(pos)
         if not codon or len(codon) < 3:
             return
+        if self.min_baseq is not None:
+            quals = read.codon_qualities_at(pos)
+            if quals is None or any(qual < self.min_baseq for qual in quals):
+                return
         depth_increment = read.occurences
         variants: dict[str, Variant] = entry["variants"]
         if read.orientation == "F":
@@ -390,3 +399,53 @@ class SamContainer:
             self._add_positions(protein_elem, entries)
         tree = ET.ElementTree(root)
         tree.write(output_path, encoding="utf-8", xml_declaration=True)
+
+    def write_stats(
+        self,
+        sample_name: str,
+        reference: FullReference,
+        output_path: Path,
+        protein_names: Sequence[str],
+        *,
+        min_freq: float,
+        min_coverage: int,
+        sb_alpha: float,
+    ) -> None:
+        """Write the opt-in stats TSV (Wilson CI, strand bias, diversity)."""
+        from .stats_writer import write_stats_tsv
+
+        write_stats_tsv(
+            sample_name,
+            reference,
+            output_path,
+            self._output_pairs(protein_names),
+            min_freq=min_freq,
+            min_coverage=min_coverage,
+            sb_alpha=sb_alpha,
+        )
+
+    def write_aavf(
+        self,
+        sample_name: str,
+        reference: FullReference,
+        output_path: Path,
+        protein_names: Sequence[str],
+        *,
+        min_freq: float,
+        min_coverage: int,
+        sb_alpha: float,
+        file_date: str | None = None,
+    ) -> None:
+        """Write the opt-in AAVF v1.0 file. Research use only; no CAT/SRVL."""
+        from .aavf import write_aavf as _write_aavf
+
+        _write_aavf(
+            sample_name,
+            reference,
+            output_path,
+            self._output_pairs(protein_names),
+            min_freq=min_freq,
+            min_coverage=min_coverage,
+            sb_alpha=sb_alpha,
+            file_date=file_date,
+        )

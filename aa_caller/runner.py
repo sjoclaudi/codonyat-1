@@ -4,10 +4,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from .cli_options import add_research_output_args
 from .constants import (
     DEFAULT_ENTROPY_THRESHOLD,
+    DEFAULT_MIN_COVERAGE,
+    DEFAULT_MIN_FREQ,
     DEFAULT_RATIO_LOWER,
     DEFAULT_RATIO_UPPER,
+    DEFAULT_SB_ALPHA,
 )
 from .container import SamContainer
 from .models import Amplicon
@@ -30,6 +34,8 @@ class VariantCallResult:
     reference: FullReference
     amplicons: dict[str, Amplicon]
     proteins: list[str] = field(default_factory=list)
+    stats_path: Path | None = None
+    aavf_path: Path | None = None
 
 
 def call_variants(
@@ -44,6 +50,13 @@ def call_variants(
     protein: str | Sequence[str] = "RT",
     csv_path: Path | str | None = None,
     xml_path: Path | str | None = None,
+    min_baseq: float | None = None,
+    stats_path: Path | str | None = None,
+    aavf_path: Path | str | None = None,
+    min_freq: float = DEFAULT_MIN_FREQ,
+    min_coverage: int = DEFAULT_MIN_COVERAGE,
+    sb_alpha: float = DEFAULT_SB_ALPHA,
+    aavf_file_date: str | None = None,
 ) -> VariantCallResult:
     """Run the codon-level pipeline and return the generated artifacts.
 
@@ -73,6 +86,7 @@ def call_variants(
         ratio_upper=ratio_upper,
         ratio_lower=ratio_lower,
         entropy_threshold=entropy_threshold,
+        min_baseq=min_baseq,
     )
     container.load()
     proteins = resolve_protein_targets(protein_spec, reference)
@@ -89,6 +103,30 @@ def call_variants(
         container.write_csv_proteins(str(sam_path), reference, csv_path, protein_names)
         container.write_xml_proteins(str(sam_path), reference, xml_path, protein_names)
 
+    stats_out = Path(stats_path) if stats_path else None
+    aavf_out = Path(aavf_path) if aavf_path else None
+    if stats_out:
+        container.write_stats(
+            str(sam_path),
+            reference,
+            stats_out,
+            protein_names,
+            min_freq=min_freq,
+            min_coverage=min_coverage,
+            sb_alpha=sb_alpha,
+        )
+    if aavf_out:
+        container.write_aavf(
+            str(sam_path),
+            reference,
+            aavf_out,
+            protein_names,
+            min_freq=min_freq,
+            min_coverage=min_coverage,
+            sb_alpha=sb_alpha,
+            file_date=aavf_file_date,
+        )
+
     return VariantCallResult(
         csv_path=csv_path,
         xml_path=xml_path,
@@ -96,6 +134,8 @@ def call_variants(
         reference=reference,
         amplicons=amplicons,
         proteins=protein_names,
+        stats_path=stats_out,
+        aavf_path=aavf_out,
     )
 
 
@@ -140,6 +180,12 @@ def call_variants_from_args(
         protein=effective_protein,
         csv_path=overriding_csv,
         xml_path=overriding_xml,
+        min_baseq=_pick("min_baseq"),
+        stats_path=_pick("stats"),
+        aavf_path=_pick("aavf"),
+        min_freq=_pick("min_freq", DEFAULT_MIN_FREQ),
+        min_coverage=_pick("min_coverage", DEFAULT_MIN_COVERAGE),
+        sb_alpha=_pick("sb_alpha", DEFAULT_SB_ALPHA),
     )
 
 
@@ -162,8 +208,13 @@ def runner_cli() -> None:
     )
     parser.add_argument("--csv-path", type=Path, help="Override the TSV output path")
     parser.add_argument("--xml-path", type=Path, help="Override the XML output path")
+    add_research_output_args(parser)
 
     args = parser.parse_args()
     result = call_variants_from_args(args, csv_path=args.csv_path, xml_path=args.xml_path)
     print(f"Wrote TSV: {result.csv_path}")
     print(f"Wrote XML: {result.xml_path}")
+    if result.stats_path:
+        print(f"Wrote stats: {result.stats_path}")
+    if result.aavf_path:
+        print(f"Wrote AAVF: {result.aavf_path}")
