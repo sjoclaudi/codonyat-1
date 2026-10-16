@@ -17,7 +17,8 @@ byte-identical to 1.2.1 (and therefore to 1.1.0 on single-record HIV-1).
 - **`--aavf PATH`**: AAVF v1.0 writer (`##fileformat=AAVFv1.0`). FILTER uses the
   stats flags. CAT and SRVL are never emitted. Partial/gapped codons map to `X`;
   amino-acid indels are not called. Header source is
-  `codonyat-1.3.0 (research use only)`.
+  `codonyat-1.3.0 (research use only)`. `##reference` is the FASTA filename;
+  each record is listed as `##contig=<ID=...,length=...>`.
 - Threshold flags used only by `--stats` / `--aavf`: `--min-freq` (default 0.01),
   `--min-coverage` (default 10), `--sb-alpha` (default 0.05).
 - Methods note with citations: [docs/methods.md](docs/methods.md).

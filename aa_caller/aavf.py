@@ -64,12 +64,17 @@ def write_aavf(
     True amino-acid indels are not called.
     """
     dated = file_date or date.today().strftime("%Y%m%d")
-    chrom_note = reference.id.replace(":", "|")
+    fasta_name = Path(reference.path).name
+    contig_lines = [
+        f"##contig=<ID={record_id.replace(':', '|')},length={len(reference.sequences[record_id])}>"
+        for record_id in reference.record_ids
+    ]
     lines = [
         "##fileformat=AAVFv1.0",
         f"##fileDate={dated}",
         f"##source=codonyat-{PACKAGE_VERSION} (research use only)",
-        f"##reference={chrom_note}",
+        f"##reference={fasta_name}",
+        *contig_lines,
         '##INFO=<ID=RC,Number=1,Type=String,Description="Reference codon">',
         '##INFO=<ID=AC,Number=.,Type=String,Description="Alternate codon(s) encoding ALT">',
         '##INFO=<ID=ACC,Number=.,Type=Integer,Description="Alternate codon counts, same order as AC">',

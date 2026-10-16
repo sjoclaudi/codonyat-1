@@ -164,6 +164,8 @@ class TestStatsAndAavf:
         text = result.aavf_path.read_text()
         assert text.startswith("##fileformat=AAVFv1.0\n")
         assert f"##source=codonyat-{PACKAGE_VERSION} (research use only)" in text
+        assert "##reference=hiv1_ref.fasta" in text
+        assert "##contig=<ID=K03455,length=30>" in text
         assert "CAT" not in text and "SRVL" not in text
         assert "resistance" not in text.lower()
         lines = text.splitlines()
@@ -189,6 +191,54 @@ class TestStatsAndAavf:
         assert "lowcov" in filt
         assert "RC=atg" in info
         assert "FWC=" in info and "RVC=" in info and "SR=" in info
+
+    def test_aavf_multi_record_reference_and_contigs(self, tmp_path: Path) -> None:
+        fasta = tmp_path / "segments.fasta"
+        fasta.write_text(
+            ">Seg1 GeneA(ProteinA):1-30\nATGCCCTTTAAAGGGCCCAAATTTGGGCCC\n"
+            ">Seg2 GeneB(ProteinB):1-36\nTTTGGGCCCAAAGGGTTTACGTCGATCGATAAAAAA\n"
+        )
+        sam = tmp_path / "reads.sam"
+        sam.write_text(
+            "@HD\tVN:1.6\n@SQ\tSN:Seg1\tLN:30\n@SQ\tSN:Seg2\tLN:36\n"
+            "read1\t0\tSeg1\t1\t30\t30M\t*\t0\t0\tATGCCCTTTAAAGGGCCCAAATTTGGGCCC\t"
+            + "I" * 30
+            + "\n"
+            "read2\t0\tSeg2\t1\t30\t36M\t*\t0\t0\tTTTGGGCCCAAAGGGTTTACGTCGATCGATAAAAAA\t"
+            + "I" * 36
+            + "\n"
+        )
+        amps = tmp_path / "amps.tsv"
+        amps.write_text(
+            "label\tprotein\treference\t5p\t3p\tstart\tend\n"
+            "Amp_1\tGeneA\tSeg1\tATG\tCCC\t1\t30\n"
+            "Amp_2\tGeneB\tSeg2\tTTT\tAAA\t1\t36\n"
+        )
+        result = call_variants(
+            sam_path=sam,
+            reference_path=fasta,
+            amplicons_path=amps,
+            protein="all",
+            csv_path=tmp_path / "out.tsv",
+            xml_path=tmp_path / "out.xml",
+            aavf_path=tmp_path / "out.aavf",
+            aavf_file_date="20261016",
+        )
+        text = result.aavf_path.read_text()
+        lines = text.splitlines()
+        assert "##reference=segments.fasta" in lines
+        assert "##reference=Seg1" not in lines
+        contig_lines = [line for line in lines if line.startswith("##contig=")]
+        assert contig_lines == [
+            "##contig=<ID=Seg1,length=30>",
+            "##contig=<ID=Seg2,length=36>",
+        ]
+        # Contigs sit after ##reference and before INFO.
+        ref_idx = lines.index("##reference=segments.fasta")
+        info_idx = next(i for i, line in enumerate(lines) if line.startswith("##INFO="))
+        assert lines[ref_idx + 1 : info_idx] == contig_lines
+        chroms = {line.split("\t")[0] for line in lines if not line.startswith("#")}
+        assert chroms == {"Seg1", "Seg2"}
 
     def test_aavf_groups_codons_by_amino_acid(self, tmp_path: Path) -> None:
         fasta = tmp_path / "ref.fasta"

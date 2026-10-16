@@ -79,6 +79,7 @@ Opt-in `--aavf PATH` writes Amino Acid Variant Format v1.0
 
 - First line `##fileformat=AAVFv1.0`
 - `##source=codonyat-1.3.0 (research use only)`
+- `##reference` is the reference FASTA filename; one `##contig=<ID=...,length=...>` line per FASTA record
 - Columns `#CHROM GENE POS REF ALT FILTER ALT_FREQ COVERAGE INFO`
 - `POS` is the 1-based amino-acid index along the protein's intervals
 - `REF`/`ALT` are IUPAC amino acids; stop is `*`; partial or gapped codons map to `X`
