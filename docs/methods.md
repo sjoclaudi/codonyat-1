@@ -1,7 +1,7 @@
-# Methods (codonyat 1.3.0)
+# Methods (codonyat 1.3.1)
 
 Research use only. These formulas apply to the opt-in `--stats` and `--aavf` outputs.
-Default TSV/XML writing is unchanged from 1.2.1.
+Default TSV/XML writing is unchanged from 1.2.1. No clinical or resistance claims.
 
 ## Error model and confidence
 
@@ -78,7 +78,7 @@ Opt-in `--aavf PATH` writes Amino Acid Variant Format v1.0
 (https://github.com/winhiv/aavf-spec, Apache-2.0):
 
 - First line `##fileformat=AAVFv1.0`
-- `##source=codonyat-1.3.0 (research use only)`
+- `##source=codonyat-1.3.1 (research use only)`
 - `##reference` is the reference FASTA filename; one `##contig=<ID=...,length=...>` line per FASTA record
 - Columns `#CHROM GENE POS REF ALT FILTER ALT_FREQ COVERAGE INFO`
 - `POS` is the 1-based amino-acid index along the protein's intervals

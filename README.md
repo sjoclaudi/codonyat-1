@@ -25,13 +25,6 @@ pip install codonyat
 
 Requires Python 3.10 or newer. The only runtime dependency is Biopython.
 
-## Running it in a workflow
-
-This repository contains only the Python package. To run codonyat on many samples
-(from FASTQ or SAM, with read QC, trimming, alignment and a merged report), use the
-separate Nextflow pipeline **[nf-codonyat](https://github.com/sjoclaudi/nf-codonyat)**,
-which installs this package from PyPI.
-
 ## CLI usage
 
 Once installed, the `codonyat` entry point is available:
@@ -61,6 +54,7 @@ codonyat sample.sam reference.fasta amplicons.tsv --annotation annotations.tsv -
 | `--min-freq` | `0.01` | Frequency floor (fraction) for `lowfreq` / AAVF FILTER |
 | `--min-coverage` | `10` | Coverage floor for `lowcov` / AAVF FILTER |
 | `--sb-alpha` | `0.05` | Fisher p-value cutoff for the `sb` flag |
+| `--collapsed-read-counts` | off | Treat a read name ending in `_<digits>` as a collapsed duplicate count. Off by default: each SAM row counts once |
 
 ### Output
 

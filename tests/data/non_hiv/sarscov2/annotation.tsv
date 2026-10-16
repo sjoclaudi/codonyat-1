@@ -1,0 +1,5 @@
+record	protein	description	intervals	strand
+MN908947.3	ORF1ab	ORF1ab polyprotein (-1 frameshift)	266-13468;13468-21555	+
+MN908947.3	S	surface glycoprotein	21563-25384	+
+MN908947.3	E	envelope protein	26245-26472	+
+MN908947.3	N	nucleocapsid phosphoprotein	28274-29533	+

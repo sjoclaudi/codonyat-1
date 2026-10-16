@@ -45,27 +45,11 @@ class FullReference:
             self.record_ids.append(record.id)
 
             if self.annotation_path is None:
-                self._parse_fasta_header(record)
+                for protein in proteins_from_fasta_record(record):
+                    self.proteins[(record.id, protein.name)] = protein
 
         if self.annotation_path:
             self._load_tsv_annotation()
-
-    def _parse_fasta_header(self, record) -> None:
-        """Parse protein annotations from FASTA header."""
-        header_parts = record.description.split(";")
-        for i, part in enumerate(header_parts):
-            part = part.strip()
-            if not part:
-                continue
-            if i == 0 and part.startswith(record.id):
-                part = part[len(record.id):].strip()
-                if not part:
-                    continue
-            if ":" not in part or "(" not in part:
-                continue
-            protein = Protein.from_string(part, record_id=record.id)
-            key = (record.id, protein.name)
-            self.proteins[key] = protein
 
     def _load_tsv_annotation(self) -> None:
         """Load protein annotations from TSV file.
@@ -127,23 +111,61 @@ class FullReference:
 
         return None
 
-    def get_seq_at(self, position: int, length: int = 3, record_id: str | None = None) -> str:
+    def get_seq_at(
+        self,
+        position: int,
+        length: int = 3,
+        record_id: str | None = None,
+        positions: Sequence[int] | None = None,
+    ) -> str:
         """Return a substring of the reference at the provided base coordinate.
 
         Args:
-            position: 1-based position
-            length: Length of substring to extract
+            position: 1-based position (used when ``positions`` is omitted)
+            length: Length of substring to extract (consecutive slice)
             record_id: Optional record ID; defaults to first record
+            positions: Actual part coordinates of a codon. When given, those
+                bases are joined in order so a junction codon is reconstructed
+                even if the parts are not a consecutive genomic slice.
         """
         if record_id is None:
             record_id = self.record_ids[0] if self.record_ids else ""
 
         seq = self.sequences.get(record_id, "")
+        if positions is not None:
+            bases: list[str] = []
+            for coord in positions:
+                idx = int(coord) - 1
+                if 0 <= idx < len(seq):
+                    bases.append(seq[idx])
+            return "".join(bases)
         return seq[position - 1 : position - 1 + length]
 
     def proteins_in_order(self) -> list[Protein]:
         """Return annotated proteins in FASTA-header / TSV order."""
         return list(self.proteins.values())
+
+
+def proteins_from_fasta_record(record) -> list[Protein]:
+    """Parse protein annotations from a FASTA record header.
+
+    Names are the annotation identifiers (``RT``, ``S``, ``ORF1ab``), not
+    substrings of the description line.
+    """
+    proteins: list[Protein] = []
+    header_parts = record.description.split(";")
+    for i, part in enumerate(header_parts):
+        part = part.strip()
+        if not part:
+            continue
+        if i == 0 and part.startswith(record.id):
+            part = part[len(record.id) :].strip()
+            if not part:
+                continue
+        if ":" not in part or "(" not in part:
+            continue
+        proteins.append(Protein.from_string(part, record_id=record.id))
+    return proteins
 
 
 def parse_protein_spec(spec: str | Sequence[str]) -> list[str]:

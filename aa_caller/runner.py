@@ -51,6 +51,7 @@ def call_variants(
     csv_path: Path | str | None = None,
     xml_path: Path | str | None = None,
     min_baseq: float | None = None,
+    collapsed_read_counts: bool = False,
     stats_path: Path | str | None = None,
     aavf_path: Path | str | None = None,
     min_freq: float = DEFAULT_MIN_FREQ,
@@ -87,6 +88,7 @@ def call_variants(
         ratio_lower=ratio_lower,
         entropy_threshold=entropy_threshold,
         min_baseq=min_baseq,
+        collapsed_read_counts=collapsed_read_counts,
     )
     container.load()
     proteins = resolve_protein_targets(protein_spec, reference)
@@ -181,6 +183,7 @@ def call_variants_from_args(
         csv_path=overriding_csv,
         xml_path=overriding_xml,
         min_baseq=_pick("min_baseq"),
+        collapsed_read_counts=bool(_pick("collapsed_read_counts", False)),
         stats_path=_pick("stats"),
         aavf_path=_pick("aavf"),
         min_freq=_pick("min_freq", DEFAULT_MIN_FREQ),

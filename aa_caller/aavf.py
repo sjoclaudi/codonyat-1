@@ -101,7 +101,9 @@ def write_aavf(
             record_id = str(entry.get("record_id", reference.id)).replace(":", "|")
             gene = protein_name.replace(":", "|")
             aa_pos = int(entry.get("aa_pos", 0)) or "."
-            ref_codon = reference.get_seq_at(pos, 3, entry.get("record_id"))
+            ref_codon = reference.get_seq_at(
+                pos, 3, entry.get("record_id"), positions=entry.get("codon_coords")
+            )
             ref_aa = aavf_amino_acid(ref_codon) if ref_codon else "X"
             fw_depth = int(entry["fw_depth"])
             rv_depth = int(entry["rv_depth"])

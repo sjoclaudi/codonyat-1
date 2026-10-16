@@ -9,7 +9,7 @@ from .constants import DEFAULT_MIN_COVERAGE, DEFAULT_MIN_FREQ, DEFAULT_SB_ALPHA
 
 
 def add_research_output_args(parser: ArgumentParser) -> None:
-    """Attach opt-in 1.3.0 flags. Defaults leave TSV/XML unchanged."""
+    """Attach opt-in 1.3.x flags. Defaults leave TSV/XML unchanged."""
     parser.add_argument(
         "--min-baseq",
         type=float,
@@ -49,4 +49,13 @@ def add_research_output_args(parser: ArgumentParser) -> None:
         type=float,
         default=DEFAULT_SB_ALPHA,
         help="Fisher exact p-value cutoff for the sb (strand-bias) flag (default: 0.05).",
+    )
+    parser.add_argument(
+        "--collapsed-read-counts",
+        action="store_true",
+        default=False,
+        help=(
+            "If set, treat a read name ending in _<digits> as a collapsed duplicate "
+            "count (that many observations). Off by default: each SAM row counts once."
+        ),
     )
