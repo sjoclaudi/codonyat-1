@@ -8,6 +8,7 @@ A Python package for codon-level amino acid variant calling from SAM alignments 
 - CIGAR-aware codon extraction that correctly handles insertions, deletions, and soft clips.
 - Ratio balancing, entropy tracking, and TSV/XML exporters mirroring the legacy Perl outputs.
 - Configurable CLI flags for strand ratio bounds, entropy sensitivity, and target protein.
+- Opt-in research statistics (Wilson CI, strand-bias test, diversity indices) and AAVF v1.0. Research use only.
 
 ## Highlights
 
@@ -54,6 +55,12 @@ codonyat sample.sam reference.fasta amplicons.tsv --annotation annotations.tsv -
 | `--ratio-upper` | `3.162` | Upper bound for strand-ratio balancing |
 | `--ratio-lower` | `0.316` | Lower bound for strand-ratio balancing |
 | `--entropy-threshold` | `0.0` | Minimum Shannon entropy to mark a position as diverse |
+| `--min-baseq` | off | Count a codon only if all 3 bases have Phred-like quality ≥ this value |
+| `--stats` | off | Optional stats TSV (CI, strand-bias, flags, diversity) |
+| `--aavf` | off | Optional AAVF v1.0 path (no CAT/SRVL) |
+| `--min-freq` | `0.01` | Frequency floor (fraction) for `lowfreq` / AAVF FILTER |
+| `--min-coverage` | `10` | Coverage floor for `lowcov` / AAVF FILTER |
+| `--sb-alpha` | `0.05` | Fisher p-value cutoff for the `sb` flag |
 
 ### Output
 
@@ -66,6 +73,24 @@ The CLI writes two files alongside the input SAM:
   - For multi-interval proteins, this follows the biological reading order through all segments
 - `[sam-file].xml` — per-position `<Depth>`, `<FwCover>`, `<RvCover>`, `<Variants>`
   - With several proteins, each protein's positions are wrapped in `<Protein name="…">`; single-protein XML is unchanged
+
+Default TSV/XML are byte-identical to 1.2.1 when the opt-in flags are omitted.
+
+### Research statistics (opt-in)
+
+`--stats PATH` writes a sidecar TSV with `LEVEL` = `variant`, `codon`, or `gene`:
+
+- **variant**: frequency as a fraction, Wilson 95% CI, Fisher strand-bias p, flags (`lowfreq`, `sb`, `lowcov`)
+- **codon / gene**: Shannon entropy (raw and normalised), Gini–Simpson, nucleotide π, amino-acid π
+
+`--aavf PATH` writes AAVF v1.0. FILTER is taken from the flags above. The file
+does not contain resistance or surveillance fields. Formulas and citations:
+[docs/methods.md](docs/methods.md).
+
+```bash
+codonyat-runner reads.sam reference.fasta amps.tsv \
+  --protein all --stats sample.stats.tsv --aavf sample.aavf
+```
 
 ### Reference FASTA format
 
@@ -186,9 +211,13 @@ codonyat/
 │   ├── models.py         # Protein, Amplicon, Variant, Qual dataclasses
 │   ├── validators.py     # Input file validation
 │   ├── genetic_code.py   # Codon translation table
-│   └── constants.py      # Default thresholds
+│   ├── constants.py      # Default thresholds
+│   ├── metrics.py        # Wilson CI, Fisher, diversity indices
+│   ├── stats_writer.py   # --stats TSV
+│   └── aavf.py           # AAVF v1.0 writer
 ├── tests/                # pytest suite (unit + integration)
 ├── docs/index.html       # Project page (GitHub Pages)
+├── docs/methods.md       # Formulas and citations for 1.3.0 outputs
 └── pyproject.toml        # Package metadata
 ```
 

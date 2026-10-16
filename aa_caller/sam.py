@@ -113,6 +113,17 @@ class SamEntry:
                 bases.append(self.sequence[read_idx])
         return "".join(bases)
 
+    def codon_qualities_at(self, position: int) -> list[float] | None:
+        """Return Phred-like qualities for the three codon bases, or None if any is missing/gapped."""
+        quals: list[float] = []
+        for offset in range(3):
+            ref_pos = position + offset
+            read_idx = self._ref_to_read.get(ref_pos)
+            if read_idx is None:
+                return None
+            quals.append(self._quality.return_quality_by_pos(read_idx))
+        return quals
+
     def is_mapped(self) -> bool:
         """True when the read is not flagged as unmapped."""
         return not (self.flag & 4)
