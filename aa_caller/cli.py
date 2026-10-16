@@ -11,7 +11,7 @@ from .constants import (
     DEFAULT_RATIO_UPPER,
 )
 from .container import SamContainer
-from .reference import FullReference
+from .reference import FullReference, parse_protein_spec, resolve_protein_targets
 from .validators import (
     parse_amplicons,
     validate_amplicon_file,
@@ -58,7 +58,11 @@ def main() -> None:
         "--protein",
         type=str,
         default=DEFAULT_PROTEIN,
-        help="Target protein name to analyze (default: RT).",
+        help=(
+            "Protein(s) to analyze: one name (default: RT), a comma-separated list "
+            "(e.g. PR,RT,INT; all counted in one pass over the SAM) or 'all' for "
+            "every protein annotated in the reference header."
+        ),
     )
     args = parser.parse_args()
 
@@ -73,7 +77,13 @@ def main() -> None:
 
     logger.info("Validating input formats before parsing")
     validate_sam_file(args.sam_file)
-    validate_reference_file(args.reference_file, protein_name=args.protein, annotation_path=args.annotation)
+    try:
+        parse_protein_spec(args.protein)
+    except ValueError as exc:
+        parser.error(str(exc))
+    validate_reference_file(
+        args.reference_file, protein_name=args.protein, annotation_path=args.annotation
+    )
     validate_amplicon_file(args.amplicons_file)
 
     logger.info("Reading amplicon configuration")
@@ -81,6 +91,11 @@ def main() -> None:
 
     logger.info("Loading reference")
     reference = FullReference(args.reference_file, annotation_path=args.annotation)
+    try:
+        proteins = resolve_protein_targets(args.protein, reference)
+    except ValueError as exc:
+        parser.error(str(exc))
+    protein_names = [protein.name for protein in proteins]
 
     logger.info("Parsing SAM entries")
     container = SamContainer(
@@ -91,12 +106,17 @@ def main() -> None:
     )
     container.load()
 
-    logger.info("Calculating %s variant frequencies", args.protein)
-    container.calculate_variant_frequencies(args.protein, reference)
+    logger.info("Calculating %s variant frequencies", ",".join(protein_names))
+    container.calculate_for_proteins(proteins, reference)
 
     csv_path = args.sam_file.with_suffix(args.sam_file.suffix + ".tsv")
     xml_path = args.sam_file.with_suffix(args.sam_file.suffix + ".xml")
     logger.info("Writing TSV results")
-    container.write_csv(str(args.sam_file), reference, csv_path, protein_name=args.protein)
-    logger.info("Writing XML dump")
-    container.write_xml(str(args.sam_file), reference, xml_path)
+    if len(proteins) == 1:
+        container.write_csv(str(args.sam_file), reference, csv_path, protein_name=protein_names[0])
+        logger.info("Writing XML dump")
+        container.write_xml(str(args.sam_file), reference, xml_path)
+    else:
+        container.write_csv_proteins(str(args.sam_file), reference, csv_path, protein_names)
+        logger.info("Writing XML dump")
+        container.write_xml_proteins(str(args.sam_file), reference, xml_path, protein_names)

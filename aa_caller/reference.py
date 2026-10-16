@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+from collections.abc import Sequence
 from pathlib import Path
 
 from Bio import SeqIO
@@ -139,3 +140,77 @@ class FullReference:
 
         seq = self.sequences.get(record_id, "")
         return seq[position - 1 : position - 1 + length]
+
+    def proteins_in_order(self) -> list[Protein]:
+        """Return annotated proteins in FASTA-header / TSV order."""
+        return list(self.proteins.values())
+
+
+def parse_protein_spec(spec: str | Sequence[str]) -> list[str]:
+    """Split a protein selection (``"RT"``, ``"PR,RT,INT"``, ``"all"`` or a list) into names.
+
+    Order is kept and duplicates are dropped. ``"all"`` is returned as ``["all"]``
+    and expanded by :func:`resolve_proteins` once the reference is loaded.
+    """
+    if isinstance(spec, str):
+        items = [part.strip() for part in spec.split(",")]
+    else:
+        items = [str(part).strip() for part in spec]
+    names: list[str] = []
+    for item in items:
+        if item and item not in names:
+            names.append(item)
+    if not names:
+        raise ValueError("No protein selected")
+    if "all" in (name.lower() for name in names) and len(names) > 1:
+        raise ValueError("'all' cannot be combined with other protein names")
+    return names
+
+
+def resolve_protein_targets(spec: str | Sequence[str], reference: FullReference) -> list[Protein]:
+    """Resolve a protein selection to annotated Protein objects.
+
+    ``"all"`` selects every annotated protein in FASTA-header / TSV order.
+    A comma-separated list keeps the requested order. On multi-record
+    references, each requested name includes every matching record.
+    """
+    names = parse_protein_spec(spec)
+    if len(names) == 1 and names[0].lower() == "all":
+        proteins = reference.proteins_in_order()
+        if not proteins:
+            raise ValueError(f"Reference {reference.path} has no annotated proteins")
+        return proteins
+    selected: list[Protein] = []
+    missing: list[str] = []
+    for name in names:
+        matches = [protein for key, protein in reference.proteins.items() if key[1] == name]
+        if not matches:
+            missing.append(name)
+        else:
+            selected.extend(matches)
+    if missing:
+        raise ValueError(f"Protein(s) not found in reference: {', '.join(missing)}")
+    return selected
+
+
+def resolve_proteins(spec: str | Sequence[str], reference: FullReference) -> list[str]:
+    """Resolve a protein selection to protein names.
+
+    ``"all"`` selects every annotated protein in FASTA-header / TSV order.
+    Names are unique; duplicate names across records are collapsed in
+    first-seen order. Use :func:`resolve_protein_targets` when record
+    identity must be preserved.
+    """
+    names = parse_protein_spec(spec)
+    if len(names) == 1 and names[0].lower() == "all":
+        if not reference.proteins:
+            raise ValueError(f"Reference {reference.path} has no annotated proteins")
+        seen: list[str] = []
+        for _record_id, protein_name in reference.proteins:
+            if protein_name not in seen:
+                seen.append(protein_name)
+        return seen
+    missing = [name for name in names if reference.get_protein(name) is None]
+    if missing:
+        raise ValueError(f"Protein(s) not found in reference: {', '.join(missing)}")
+    return names
