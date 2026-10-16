@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "codonyat"
-version = "1.3.0"
+version = "1.3.1"
 description = "codon-yat — A codon-aware (Yet Another) amino acid variant typer from SAM alignments of viral NGS data."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -30,7 +30,6 @@ include = ["aa_caller*"]
 "Source" = "https://github.com/mnoguera/codonyat"
 "Documentation" = "https://mnoguera.github.io/codonyat/"
 "Issues" = "https://github.com/mnoguera/codonyat/issues"
-"Nextflow pipeline (nf-codonyat)" = "https://github.com/sjoclaudi/nf-codonyat"
 
 [project.scripts]
 codonyat = "aa_caller.cli:main"

@@ -2,6 +2,27 @@
 
 All notable changes to codonyat are documented in this file.
 
+## [1.3.1] - 2026-10-16
+
+Research use only. No clinical or resistance claims.
+
+### Changed
+- **`--collapsed-read-counts`**: a read name ending in `_<digits>` is treated as a
+  collapsed duplicate count only when this flag is set. By default each SAM row
+  counts once (`sample_123` is one observation). HIV regression fixtures do not
+  use a numeric multiplicity suffix, so they stay byte-identical without the flag.
+- Multi-interval proteins carry the reading frame across parts. A codon that
+  crosses a junction is kept, and `SamEntry.codon_at` / `FullReference.get_seq_at`
+  build it from the actual part coordinates (for example positions 10, 11 and 12
+  of intervals 1-10;11-30).
+- `--protein` names are matched exactly against parsed FASTA header annotation
+  names, not as substrings of the header line (`--protein S` no longer matches
+  `NS(...)`).
+
+### Unchanged
+- SARS-CoV-2 ORF1ab (`266-13468;13468-21555`) still has 7097 codons.
+- No Nextflow content in this repository.
+
 ## [1.3.0] - 2026-10-16
 
 Research use only. All 1.3.0 features are **opt-in**. Default TSV and XML remain

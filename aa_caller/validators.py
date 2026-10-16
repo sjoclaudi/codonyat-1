@@ -6,6 +6,7 @@ from pathlib import Path
 from Bio import SeqIO
 
 from .models import Amplicon
+from .reference import proteins_from_fasta_record
 
 
 def validate_sam_file(path: Path) -> None:
@@ -39,12 +40,14 @@ def validate_reference_file(
     if annotation_path:
         return
 
-    descriptions = [record.description for record in records]
+    annotated_names = {
+        protein.name for record in records for protein in proteins_from_fasta_record(record)
+    }
     for name in protein_name.split(","):
         name = name.strip()
         if not name or name.lower() == "all":
             continue
-        if not any(name in description for description in descriptions):
+        if name not in annotated_names:
             raise ValueError(f"Reference {path} header is missing an {name} protein annotation")
 
 

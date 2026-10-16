@@ -6,7 +6,7 @@ DEFAULT_ENTROPY_THRESHOLD = 0.0
 DEFAULT_PROTEIN = "RT"
 
 # Opt-in research statistics (v1.3.0). Unused unless --stats / --aavf / --min-baseq is set.
-PACKAGE_VERSION = "1.3.0"
+PACKAGE_VERSION = "1.3.1"
 WILSON_Z_95 = 1.959963984540054  # Φ^{-1}(0.975)
 DEFAULT_MIN_FREQ = 0.01
 DEFAULT_MIN_COVERAGE = 10

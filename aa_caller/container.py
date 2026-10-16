@@ -25,6 +25,7 @@ class SamContainer:
         ratio_lower: float,
         entropy_threshold: float,
         min_baseq: float | None = None,
+        collapsed_read_counts: bool = False,
     ) -> None:
         """Initialize the container with the SAM path, ratio window, and entropy threshold."""
         self.sam_path = sam_path
@@ -36,6 +37,7 @@ class SamContainer:
         self.ratio_lower = ratio_lower
         self.entropy_threshold = entropy_threshold
         self.min_baseq = min_baseq
+        self.collapsed_read_counts = collapsed_read_counts
 
     def load(self) -> None:
         """Load every mapped read from the SAM file so they can be aggregated."""
@@ -43,7 +45,7 @@ class SamContainer:
             for line in fh:
                 if line.startswith("@"):
                     continue
-                entry = SamEntry(line)
+                entry = SamEntry(line, collapsed_read_counts=self.collapsed_read_counts)
                 if entry.is_mapped():
                     self.reads.append(entry)
 
@@ -93,7 +95,7 @@ class SamContainer:
         for protein in proteins:
             entries: dict[int, dict] = {}
             aa_pos = 0
-            for pos, record_id in self._get_codon_positions(protein, reference):
+            for pos, record_id, codon_coords in self._get_codon_positions(protein, reference):
                 aa_pos += 1
                 entries[pos] = {
                     "variants": {},
@@ -103,6 +105,7 @@ class SamContainer:
                     "amplicons": {},
                     "record_id": record_id,
                     "aa_pos": aa_pos,
+                    "codon_coords": codon_coords,
                 }
             jobs.append((protein, entries))
 
@@ -128,13 +131,16 @@ class SamContainer:
 
     def _accumulate_read_at_position(self, read: SamEntry, pos: int, entry: dict) -> None:
         """Add one mapped read's codon to a protein position, if it covers it."""
-        if not read.covers(pos):
+        codon_coords = entry.get("codon_coords")
+        if codon_coords is None:
+            codon_coords = (pos, pos + 1, pos + 2)
+        if not any(read.covers(coord) for coord in codon_coords):
             return
-        codon = read.codon_at(pos)
+        codon = read.codon_at(pos, positions=codon_coords)
         if not codon or len(codon) < 3:
             return
         if self.min_baseq is not None:
-            quals = read.codon_qualities_at(pos)
+            quals = read.codon_qualities_at(pos, positions=codon_coords)
             if quals is None or any(qual < self.min_baseq for qual in quals):
                 return
         depth_increment = read.occurences
@@ -166,27 +172,21 @@ class SamContainer:
         amp_position["depth"] += depth_increment
 
     def _get_codon_positions(self, protein, reference: FullReference) -> list[tuple]:
-        """Generate list of (position, record_id) tuples for all codons in the protein.
+        """Generate (start, record_id, codon_coords) for every codon in the protein.
 
-        Handles multi-interval proteins including frameshifts.
+        Coding bases are concatenated in interval order so the reading frame is
+        carried across parts. A codon that sits on a junction keeps the actual
+        part coordinates (for example positions 10, 11, 12 of 1-10;11-30).
+        Incomplete trailing bases at the end of the protein are dropped.
         """
-        positions = []
-        current_offset = 0
-
+        coding_bases: list[int] = []
         for interval in protein.intervals:
-            interval_length = interval.end - interval.start + 1
-            pos = interval.start
+            coding_bases.extend(range(interval.start, interval.end + 1))
 
-            while pos <= interval.end:
-                remaining_in_interval = interval.end - pos + 1
-                if remaining_in_interval >= 3:
-                    positions.append((pos, protein.record_id))
-                    pos += 3
-                else:
-                    break
-
-            current_offset += interval_length
-
+        positions = []
+        for i in range(0, len(coding_bases) // 3 * 3, 3):
+            codon_coords = (coding_bases[i], coding_bases[i + 1], coding_bases[i + 2])
+            positions.append((codon_coords[0], protein.record_id, codon_coords))
         return positions
 
     def calculate_ratios_nucleotide(self, position: int) -> None:

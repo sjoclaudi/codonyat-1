@@ -106,6 +106,7 @@ def main() -> None:
         ratio_lower=args.ratio_lower,
         entropy_threshold=args.entropy_threshold,
         min_baseq=args.min_baseq,
+        collapsed_read_counts=args.collapsed_read_counts,
     )
     container.load()
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 __all__ = ["SamEntry"]
 
 import re
+from collections.abc import Sequence
 
 from .models import Qual
 
@@ -13,7 +14,7 @@ _CIGAR_RE = re.compile(r"(\d+)([MIDNSHP=X])")
 class SamEntry:
     """Wraps a SAM record with convenience helpers used during variant aggregation."""
 
-    def __init__(self, line: str) -> None:
+    def __init__(self, line: str, collapsed_read_counts: bool = False) -> None:
         """Parse a single SAM line and cache derived attributes that the pipeline needs."""
         self.raw = line.strip()
         self.fields = self.raw.split("\t")
@@ -27,6 +28,7 @@ class SamEntry:
         self.quality_string = self.fields[10]
         self.options = self.fields[11:]
         self.orientation = self._determine_orientation()
+        self.collapsed_read_counts = collapsed_read_counts
         self.occurences = self._parse_occurences()
         self._reference_covered_length = self._compute_reference_covered_length()
         self._ref_to_read = self._build_ref_to_read_map()
@@ -40,7 +42,13 @@ class SamEntry:
         return "F"
 
     def _parse_occurences(self) -> int:
-        """Detect if the identifier encodes a multiplicity suffix and return count."""
+        """Return how many observations this SAM row represents.
+
+        By default each row counts once. With ``collapsed_read_counts``, a
+        read name ending in ``_<digits>`` is treated as that many duplicates.
+        """
+        if not self.collapsed_read_counts:
+            return 1
         parts = self.identifier.split("_")
         tail = parts[-1]
         if tail.isdigit():
@@ -99,11 +107,26 @@ class SamEntry:
         """Check whether this read spans the requested reference position."""
         return self.coordinate <= position <= self.coordinate + self._reference_covered_length - 1
 
-    def codon_at(self, position: int) -> str | None:
-        """Return the codon at the given reference position using the CIGAR-aware mapping."""
+    def _codon_ref_positions(
+        self, position: int, positions: Sequence[int] | None = None
+    ) -> tuple[int, int, int]:
+        """Resolve the three reference bases of a codon.
+
+        ``positions`` is the actual part coordinates (needed when a codon
+        crosses a multi-interval junction). Consecutive ``position..+2`` is
+        used only when the caller does not supply them.
+        """
+        if positions is not None:
+            coords = tuple(int(p) for p in positions)
+            if len(coords) != 3:
+                raise ValueError("codon positions must contain exactly three coordinates")
+            return coords[0], coords[1], coords[2]
+        return position, position + 1, position + 2
+
+    def codon_at(self, position: int, positions: Sequence[int] | None = None) -> str | None:
+        """Return the codon at the given reference coordinates using the CIGAR-aware mapping."""
         bases = []
-        for offset in range(3):
-            ref_pos = position + offset
+        for ref_pos in self._codon_ref_positions(position, positions):
             read_idx = self._ref_to_read.get(ref_pos)
             if read_idx is None and ref_pos in self._ref_to_read:
                 bases.append("-")
@@ -113,11 +136,12 @@ class SamEntry:
                 bases.append(self.sequence[read_idx])
         return "".join(bases)
 
-    def codon_qualities_at(self, position: int) -> list[float] | None:
+    def codon_qualities_at(
+        self, position: int, positions: Sequence[int] | None = None
+    ) -> list[float] | None:
         """Return Phred-like qualities for the three codon bases, or None if any is missing/gapped."""
         quals: list[float] = []
-        for offset in range(3):
-            ref_pos = position + offset
+        for ref_pos in self._codon_ref_positions(position, positions):
             read_idx = self._ref_to_read.get(ref_pos)
             if read_idx is None:
                 return None

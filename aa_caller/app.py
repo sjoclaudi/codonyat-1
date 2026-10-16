@@ -20,6 +20,7 @@ from .models import Amplicon, Protein, Qual, Variant  # noqa: F401
 from .reference import (  # noqa: F401
     FullReference,
     parse_protein_spec,
+    proteins_from_fasta_record,
     resolve_protein_targets,
     resolve_proteins,
 )
