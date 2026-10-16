@@ -4,10 +4,11 @@ import csv
 import logging
 import math
 import xml.etree.ElementTree as ET
+from collections.abc import Sequence
 from pathlib import Path
 
 from .genetic_code import codon_to_aminoacid
-from .models import Variant
+from .models import Protein, Variant
 from .reference import FullReference
 from .sam import SamEntry
 
@@ -27,7 +28,9 @@ class SamContainer:
         """Initialize the container with the SAM path, ratio window, and entropy threshold."""
         self.sam_path = sam_path
         self.reads: list[SamEntry] = []
-        self.variants: dict[int, dict[str, Variant]] = {}
+        self.variants: dict[int, dict] = {}
+        self.protein_variants: dict[str, dict[int, dict]] = {}
+        self._protein_result_list: list[tuple[str, dict[int, dict]]] = []
         self.ratio_upper = ratio_upper
         self.ratio_lower = ratio_lower
         self.entropy_threshold = entropy_threshold
@@ -42,66 +45,116 @@ class SamContainer:
                 if entry.is_mapped():
                     self.reads.append(entry)
 
-    def calculate_variant_frequencies(self, protein_name: str, reference: FullReference, record_id: str = None) -> None:
+    def calculate_variant_frequencies(
+        self, protein_name: str, reference: FullReference, record_id: str | None = None
+    ) -> None:
         """Walk every position of the requested protein and build variant histories.
 
-        Supports multi-interval proteins (frameshift, splicing, circular).
+        Equivalent to ``calculate_variant_frequencies_multi([protein_name], reference)``
+        when ``record_id`` is omitted. Supports multi-interval proteins
+        (frameshift, splicing, circular).
         """
         protein = reference.get_protein(protein_name, record_id)
         if protein is None:
             raise ValueError(f"Protein {protein_name} not found in reference")
+        self.calculate_for_proteins([protein], reference)
 
-        codon_positions = self._get_codon_positions(protein, reference)
+    def calculate_variant_frequencies_multi(
+        self, protein_names: Sequence[str], reference: FullReference
+    ) -> None:
+        """Count codons for several proteins in a single pass over loaded reads.
 
-        for pos, record_id in codon_positions:
-            variants: dict[str, Variant] = {}
-            fw_depth = 0
-            rv_depth = 0
-            amplicons_info: dict[str, dict[str, int]] = {}
-            for read in self.reads:
-                if read.reference != record_id:
+        Results are stored per protein in ``self.protein_variants``;
+        ``self.variants`` points at the first requested protein (the only one in
+        single-protein runs), as in 1.1.0.
+        """
+        if not protein_names:
+            raise ValueError("At least one protein is required")
+        proteins: list[Protein] = []
+        for name in protein_names:
+            protein = reference.get_protein(name)
+            if protein is None:
+                raise ValueError(f"Protein {name} not found in reference")
+            proteins.append(protein)
+        self.calculate_for_proteins(proteins, reference)
+
+    def calculate_for_proteins(self, proteins: Sequence[Protein], reference: FullReference) -> None:
+        """Count every requested protein in one pass over ``self.reads``.
+
+        Supports multi-record references (reads are matched by RNAME) and
+        multi-interval proteins.
+        """
+        if not proteins:
+            raise ValueError("At least one protein is required")
+
+        jobs: list[tuple[Protein, dict[int, dict]]] = []
+        for protein in proteins:
+            entries: dict[int, dict] = {}
+            for pos, record_id in self._get_codon_positions(protein, reference):
+                entries[pos] = {
+                    "variants": {},
+                    "fw_depth": 0,
+                    "rv_depth": 0,
+                    "depth": 0,
+                    "amplicons": {},
+                    "record_id": record_id,
+                }
+            jobs.append((protein, entries))
+
+        for read in self.reads:
+            for protein, entries in jobs:
+                if read.reference != protein.record_id:
                     continue
-                if not read.covers(pos):
-                    continue
-                codon = read.codon_at(pos)
-                if not codon or len(codon) < 3:
-                    continue
-                depth_increment = read.occurences
-                if read.orientation == "F":
-                    fw_depth += depth_increment
-                else:
-                    rv_depth += depth_increment
-                variant = variants.setdefault(codon, Variant(codon=codon))
-                variant.count += depth_increment
-                if read.orientation == "F":
-                    variant.fw_reads += depth_increment
-                else:
-                    variant.rv_reads += depth_increment
-                amplicon_label = read.amplicon or "Amp_NONE"
-                amp_variant = variant.amplicons.setdefault(amplicon_label, {"fw": 0, "rv": 0})
-                if read.orientation == "F":
-                    amp_variant["fw"] += depth_increment
-                else:
-                    amp_variant["rv"] += depth_increment
-                amp_position = amplicons_info.setdefault(amplicon_label, {"fw_depth": 0, "rv_depth": 0, "depth": 0})
-                if read.orientation == "F":
-                    amp_position["fw_depth"] += depth_increment
-                else:
-                    amp_position["rv_depth"] += depth_increment
-                amp_position["depth"] += depth_increment
-            entry = {
-                "variants": variants,
-                "fw_depth": fw_depth,
-                "rv_depth": rv_depth,
-                "depth": fw_depth + rv_depth,
-                "amplicons": amplicons_info,
-                "record_id": record_id,
-            }
-            self.variants[pos] = entry
-            self.calculate_ratios_nucleotide(pos)
-            self.calculate_ratios_aminoacid(pos)
-            self.calculate_shannon_entropy_single_position(pos)
-            self.log_position_stats(pos)
+                for pos, entry in entries.items():
+                    self._accumulate_read_at_position(read, pos, entry)
+
+        self.protein_variants = {}
+        self._protein_result_list = []
+        for protein, entries in jobs:
+            self.variants = entries
+            for pos in self.variants:
+                self.calculate_ratios_nucleotide(pos)
+                self.calculate_ratios_aminoacid(pos)
+                self.calculate_shannon_entropy_single_position(pos)
+                self.log_position_stats(pos)
+            self.protein_variants[protein.name] = self.variants
+            self._protein_result_list.append((protein.name, self.variants))
+        self.variants = jobs[0][1]
+
+    def _accumulate_read_at_position(self, read: SamEntry, pos: int, entry: dict) -> None:
+        """Add one mapped read's codon to a protein position, if it covers it."""
+        if not read.covers(pos):
+            return
+        codon = read.codon_at(pos)
+        if not codon or len(codon) < 3:
+            return
+        depth_increment = read.occurences
+        variants: dict[str, Variant] = entry["variants"]
+        if read.orientation == "F":
+            entry["fw_depth"] += depth_increment
+        else:
+            entry["rv_depth"] += depth_increment
+        entry["depth"] += depth_increment
+        variant = variants.setdefault(codon, Variant(codon=codon))
+        variant.count += depth_increment
+        if read.orientation == "F":
+            variant.fw_reads += depth_increment
+        else:
+            variant.rv_reads += depth_increment
+        amplicon_label = read.amplicon or "Amp_NONE"
+        amp_variant = variant.amplicons.setdefault(amplicon_label, {"fw": 0, "rv": 0})
+        if read.orientation == "F":
+            amp_variant["fw"] += depth_increment
+        else:
+            amp_variant["rv"] += depth_increment
+        amp_position = entry["amplicons"].setdefault(
+            amplicon_label, {"fw_depth": 0, "rv_depth": 0, "depth": 0}
+        )
+        if read.orientation == "F":
+            amp_position["fw_depth"] += depth_increment
+        else:
+            amp_position["rv_depth"] += depth_increment
+        amp_position["depth"] += depth_increment
 
     def _get_codon_positions(self, protein, reference: FullReference) -> list[tuple]:
         """Generate list of (position, record_id) tuples for all codons in the protein.
@@ -207,48 +260,101 @@ class SamContainer:
             balanced,
         )
 
-    def write_csv(self, sample_name: str, reference: FullReference, output_path: Path, *, protein_name: str = "RT") -> None:
+    def _entries_for(self, protein_name: str) -> dict[int, dict]:
+        """Per-position results for a protein (falls back to ``self.variants``)."""
+        return self.protein_variants.get(protein_name, self.variants)
+
+    def _csv_fieldnames(self, reference: FullReference) -> list[str]:
+        has_multiple_records = len(reference.record_ids) > 1
+        fieldnames = ["FILE", "REFERENCE"]
+        if has_multiple_records:
+            fieldnames.append("RECORD")
+        fieldnames.extend(
+            ["PROTEIN", "VARIANT", "POSITION", "FREQ", "FWCOV", "RVCOV", "TOTALCOV", "RATIO"]
+        )
+        return fieldnames
+
+    def _write_csv_rows(
+        self,
+        writer: csv.DictWriter,
+        sample_name: str,
+        reference: FullReference,
+        protein_name: str,
+        entries: dict[int, dict] | None = None,
+    ) -> None:
+        has_multiple_records = len(reference.record_ids) > 1
+        if entries is None:
+            entries = self._entries_for(protein_name)
+        for pos, entry in sorted(entries.items()):
+            depth = entry["depth"]
+            ratio = entry["fw_depth"] / entry["rv_depth"] if entry["rv_depth"] else 0
+            record_id = entry.get("record_id", reference.id)
+            for variant in entry["variants"].values():
+                row = {
+                    "FILE": sample_name,
+                    "REFERENCE": record_id,
+                    "PROTEIN": protein_name,
+                    "VARIANT": variant.codon,
+                    "POSITION": pos,
+                    "FREQ": round((variant.count / depth * 100) if depth else 0, 3),
+                    "FWCOV": entry["fw_depth"],
+                    "RVCOV": entry["rv_depth"],
+                    "TOTALCOV": depth,
+                    "RATIO": round(ratio, 3),
+                }
+                if has_multiple_records:
+                    row["RECORD"] = record_id
+                writer.writerow(row)
+
+    def write_csv(
+        self, sample_name: str, reference: FullReference, output_path: Path, *, protein_name: str = "RT"
+    ) -> None:
         """Emit the variant summary as a TSV file that mirrors the Perl outputs.
 
         For multi-record references, adds a RECORD column after REFERENCE.
         Single-record outputs remain byte-identical to 1.1.0.
         """
-        has_multiple_records = len(reference.record_ids) > 1
+        self.write_csv_proteins(sample_name, reference, output_path, [protein_name])
 
-        fieldnames = ["FILE", "REFERENCE"]
-        if has_multiple_records:
-            fieldnames.append("RECORD")
-        fieldnames.extend(["PROTEIN", "VARIANT", "POSITION", "FREQ", "FWCOV", "RVCOV", "TOTALCOV", "RATIO"])
-
+    def write_csv_proteins(
+        self,
+        sample_name: str,
+        reference: FullReference,
+        output_path: Path,
+        protein_names: Sequence[str],
+    ) -> None:
+        """Emit one TSV with a single header and the rows of each protein, in the given order."""
+        fieldnames = self._csv_fieldnames(reference)
+        pairs = self._output_pairs(protein_names)
         with open(output_path, "w", newline="") as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames, delimiter="\t")
             writer.writeheader()
-            for pos, entry in sorted(self.variants.items()):
-                depth = entry["depth"]
-                ratio = entry["fw_depth"] / entry["rv_depth"] if entry["rv_depth"] else 0
-                record_id = entry.get("record_id", reference.id)
-                for variant in entry["variants"].values():
-                    row = {
-                        "FILE": sample_name,
-                        "REFERENCE": record_id,
-                        "PROTEIN": protein_name,
-                        "VARIANT": variant.codon,
-                        "POSITION": pos,
-                        "FREQ": round((variant.count / depth * 100) if depth else 0, 3),
-                        "FWCOV": entry["fw_depth"],
-                        "RVCOV": entry["rv_depth"],
-                        "TOTALCOV": depth,
-                        "RATIO": round(ratio, 3),
-                    }
-                    if has_multiple_records:
-                        row["RECORD"] = record_id
-                    writer.writerow(row)
+            for protein_name, entries in pairs:
+                self._write_csv_rows(writer, sample_name, reference, protein_name, entries)
 
-    def write_xml(self, sample_name: str, reference: FullReference, output_path: Path) -> None:
-        """Dump the internal state into XML for downstream diagnostics."""
-        root = ET.Element("SamContainer", sample=sample_name, reference=reference.id)
-        for pos, entry in sorted(self.variants.items()):
-            position_elem = ET.SubElement(root, "Position", index=str(pos))
+    def _output_pairs(self, protein_names: Sequence[str]) -> list[tuple[str, dict[int, dict]]]:
+        """Map requested names to counted entries, preserving duplicate-name order."""
+        calculated = [name for name, _entries in self._protein_result_list]
+        if self._protein_result_list and calculated == list(protein_names):
+            return list(self._protein_result_list)
+        used: set[int] = set()
+        pairs: list[tuple[str, dict[int, dict]]] = []
+        for name in protein_names:
+            found = False
+            for index, (result_name, entries) in enumerate(self._protein_result_list):
+                if result_name == name and index not in used:
+                    used.add(index)
+                    pairs.append((result_name, entries))
+                    found = True
+                    break
+            if not found:
+                pairs.append((name, self._entries_for(name)))
+        return pairs
+
+    @staticmethod
+    def _add_positions(parent: ET.Element, entries: dict[int, dict]) -> None:
+        for pos, entry in sorted(entries.items()):
+            position_elem = ET.SubElement(parent, "Position", index=str(pos))
             ET.SubElement(position_elem, "Depth").text = str(entry["depth"])
             ET.SubElement(position_elem, "FwCover").text = str(entry["fw_depth"])
             ET.SubElement(position_elem, "RvCover").text = str(entry["rv_depth"])
@@ -259,5 +365,28 @@ class SamContainer:
                 var_elem.set("count", str(variant.count))
                 var_elem.set("fw_reads", str(variant.fw_reads))
                 var_elem.set("rv_reads", str(variant.rv_reads))
+
+    def write_xml(self, sample_name: str, reference: FullReference, output_path: Path) -> None:
+        """Dump the per-position state of the (first) protein into XML for diagnostics."""
+        root = ET.Element("SamContainer", sample=sample_name, reference=reference.id)
+        self._add_positions(root, self.variants)
+        tree = ET.ElementTree(root)
+        tree.write(output_path, encoding="utf-8", xml_declaration=True)
+
+    def write_xml_proteins(
+        self,
+        sample_name: str,
+        reference: FullReference,
+        output_path: Path,
+        protein_names: Sequence[str],
+    ) -> None:
+        """Multi-protein XML: one ``<Protein name=...>`` element per protein wrapping its positions.
+
+        For a single protein use :meth:`write_xml`, whose layout is unchanged.
+        """
+        root = ET.Element("SamContainer", sample=sample_name, reference=reference.id)
+        for protein_name, entries in self._output_pairs(protein_names):
+            protein_elem = ET.SubElement(root, "Protein", name=protein_name)
+            self._add_positions(protein_elem, entries)
         tree = ET.ElementTree(root)
         tree.write(output_path, encoding="utf-8", xml_declaration=True)

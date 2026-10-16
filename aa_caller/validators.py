@@ -21,11 +21,16 @@ def validate_sam_file(path: Path) -> None:
         raise ValueError(f"SAM file {path} contains no alignment entries")
 
 
-def validate_reference_file(path: Path, *, protein_name: str = "RT", annotation_path: Path = None) -> None:
+def validate_reference_file(
+    path: Path, *, protein_name: str = "RT", annotation_path: Path | None = None
+) -> None:
     """Ensure the reference FASTA is valid and has protein annotations.
 
     Supports multi-record FASTA files. If annotation_path is provided,
     validates that instead of FASTA headers.
+
+    ``protein_name`` may be one name, a comma-separated list, or ``all``
+    (which only requires the FASTA to be readable).
     """
     records = list(SeqIO.parse(str(path), "fasta"))
     if not records:
@@ -34,14 +39,13 @@ def validate_reference_file(path: Path, *, protein_name: str = "RT", annotation_
     if annotation_path:
         return
 
-    found_protein = False
-    for record in records:
-        if protein_name in record.description:
-            found_protein = True
-            break
-
-    if not found_protein:
-        raise ValueError(f"Reference {path} header is missing an {protein_name} protein annotation")
+    descriptions = [record.description for record in records]
+    for name in protein_name.split(","):
+        name = name.strip()
+        if not name or name.lower() == "all":
+            continue
+        if not any(name in description for description in descriptions):
+            raise ValueError(f"Reference {path} header is missing an {name} protein annotation")
 
 
 def validate_amplicon_file(path: Path) -> None:

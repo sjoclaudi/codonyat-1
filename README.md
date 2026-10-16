@@ -14,7 +14,7 @@ A Python package for codon-level amino acid variant calling from SAM alignments 
 - Produces consistent TSV/XML diagnostics while exposing Python objects (`SamContainer`, `FullReference`, etc.) that downstream tooling can import.
 - Validates every input file before parsing to surface malformed SAM/FASTA/amplicon data early.
 - Logs per-position entropy and strand balance for easier debugging in CI or local runs.
-- Supports any protein target via `--protein` (defaults to RT).
+- Supports any protein target via `--protein` (one name, a comma-separated list, or `all`; defaults to RT).
 
 ## Installation
 
@@ -50,7 +50,7 @@ codonyat sample.sam reference.fasta amplicons.tsv --annotation annotations.tsv -
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--annotation` | None | Optional TSV annotation file (record, protein, description, intervals, strand) |
-| `--protein` | `RT` | Target protein name (must match a FASTA header or TSV annotation) |
+| `--protein` | `RT` | Protein(s) to analyse: one name, a comma-separated list (e.g. `PR,RT,INT`, counted in a single pass) or `all` (every protein annotated in the reference header or TSV). Names must match the FASTA header annotations |
 | `--ratio-upper` | `3.162` | Upper bound for strand-ratio balancing |
 | `--ratio-lower` | `0.316` | Lower bound for strand-ratio balancing |
 | `--entropy-threshold` | `0.0` | Minimum Shannon entropy to mark a position as diverse |
@@ -65,6 +65,7 @@ The CLI writes two files alongside the input SAM:
   - Rows are ordered by genomic position (codon index) along the protein's intervals
   - For multi-interval proteins, this follows the biological reading order through all segments
 - `[sam-file].xml` — per-position `<Depth>`, `<FwCover>`, `<RvCover>`, `<Variants>`
+  - With several proteins, each protein's positions are wrapped in `<Protein name="…">`; single-protein XML is unchanged
 
 ### Reference FASTA format
 
@@ -123,7 +124,7 @@ result = call_variants(
     sam_path=Path("reads.sam"),
     reference_path=Path("reference.fasta"),
     amplicons_path=Path("amps.tsv"),
-    protein="RT",
+    protein="PR,RT,INT",  # or "all", "RT", or ["PR", "RT"]
     ratio_upper=3.2,
 )
 
@@ -152,7 +153,7 @@ call_variants_from_args(args)
 A lightweight runner at `codonyat-runner` exposes the same arguments as `call_variants_from_args`:
 
 ```bash
-codonyat-runner reads.sam reference.fasta amps.tsv --protein RT --ratio-upper 3.1 --csv-path results.tsv
+codonyat-runner reads.sam reference.fasta amps.tsv --protein PR,RT,INT --ratio-upper 3.1 --csv-path results.tsv
 ```
 
 ## Development
